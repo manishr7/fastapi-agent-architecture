@@ -31,6 +31,29 @@ This is a reference architecture, not a finished product.
   under real traffic. Claims here describe what's checkable in the code and
   CI, not operational history.
 
+## Known limitations
+
+What the enforcement mechanisms above don't cover, stated plainly rather
+than discovered by surprise:
+
+- **Layer skipping isn't caught.** The `import-linter` layers contract
+  (`api/pyproject.toml`) forbids a lower layer importing a higher one, but
+  it doesn't forbid a higher layer skipping an adjacent one — e.g. a router
+  importing a repository directly, bypassing its use case. Catching that
+  would need a second contract type or a custom check; neither exists yet.
+- **No database or Redis in CI.** Tests mock `AsyncSession` and the Redis
+  client rather than exercising a real MySQL or Redis instance — nothing in
+  CI currently verifies real connectivity, only the translation/business
+  logic built on top of it.
+- **The rule-tree sync is manual.** `.claude/rules/*.md` and
+  `.cursor/rules/*.mdc` are kept in sync by hand, not by tooling — see
+  `CONTRIBUTING.md`. It has already drifted once in this repository's own
+  history; nothing currently prevents it from happening again.
+- **One real module.** The five-folder per-module pattern
+  (`01-folder-structure.md`) has been exercised by exactly one complete
+  implementation (`health`). It hasn't been proven across enough modules to
+  know how it holds up at more realistic scale.
+
 ## Repository layout
 
 | Path | Stack | Role |
