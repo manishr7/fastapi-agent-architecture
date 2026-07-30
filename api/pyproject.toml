@@ -19,6 +19,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "httpx>=0.28.0",
+    "import-linter>=2.1",
     "pre-commit>=4.0.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.24.0",
@@ -75,6 +76,47 @@ quote-style = "double"
 indent-style = "space"
 line-ending = "lf"
 docstring-code-format = true
+
+[tool.importlinter]
+root_package = "app"
+
+# Enforces 07-use-cases.md / 13-transactions.md's "Router -> Use Case ->
+# Repository -> Database, never reversed." import-linter's layers contract
+# only forbids upward imports (a lower layer importing a higher one) — it
+# does not forbid a higher layer skipping past an adjacent one (e.g. a
+# router importing repositories directly). That narrower, skip-level case
+# is not covered here; catching it would need a second contract type or
+# the same kind of small custom check as the commit()/rollback() test in
+# tests/test_architecture_boundaries.py.
+[[tool.importlinter.contracts]]
+name = "Module layering: router -> use_cases -> repositories -> domain, never reversed"
+type = "layers"
+layers = [
+    "router",
+    "use_cases",
+    "repositories",
+    "domain",
+]
+containers = [
+    "app.modules.auth",
+    "app.modules.health",
+]
+
+# Enforces 01-folder-structure.md's "app/api/ contains ONLY APIRouter
+# instantiation and include_router() calls... MUST NOT contain endpoint
+# implementations, business logic, use cases, repositories, SQL, or
+# schemas." This checks the clearest, most severe version of that rule —
+# direct persistence/infrastructure access — not every possible violation.
+[[tool.importlinter.contracts]]
+name = "app/api/ is HTTP composition only: no direct database or infrastructure access"
+type = "forbidden"
+source_modules = [
+    "app.api",
+]
+forbidden_modules = [
+    "app.database",
+    "app.infrastructure",
+]
 
 [build-system]
 requires = ["hatchling"]

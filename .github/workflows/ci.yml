@@ -31,5 +31,8 @@ jobs:
       - name: Format check (ruff format)
         run: uv run ruff format --check .
 
+      - name: Layer boundaries (import-linter)
+        run: uv run lint-imports
+
       - name: Tests
         run: uv run pytest
