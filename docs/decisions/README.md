@@ -38,3 +38,4 @@ Which `.claude/rules/*.md` file(s) this is sourced from.
 | ADR | Decision |
 |---|---|
 | [0001](0001-async-session-as-unit-of-work.md) | `AsyncSession` as the Unit of Work — no separate transaction abstraction |
+| [0002](0002-redis-fail-open-cache-fail-closed-locks.md) | Redis: cache fails open, locks fail closed |
