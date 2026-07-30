@@ -60,6 +60,10 @@ the "what":
 - [`docs/rule-system.md`](docs/rule-system.md) — how the two rule trees
   (`.claude/rules/` vs. `.cursor/rules/`) stay in sync, why rules load
   always-on vs. path-scoped, and rule precedence when two files overlap.
+- [`docs/architecture.md`](docs/architecture.md) — a diagram of the
+  layering flow and `app.state` resources, plus exactly what enforces it
+  today (import-linter, the repository-boundary test, the `AsyncSession`
+  concurrency test) versus what's diagram-only intent.
 
 ---
 
