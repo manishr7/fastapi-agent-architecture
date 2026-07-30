@@ -39,3 +39,5 @@ Which `.claude/rules/*.md` file(s) this is sourced from.
 |---|---|
 | [0001](0001-async-session-as-unit-of-work.md) | `AsyncSession` as the Unit of Work — no separate transaction abstraction |
 | [0002](0002-redis-fail-open-cache-fail-closed-locks.md) | Redis: cache fails open, locks fail closed |
+| [0003](0003-global-exception-handlers-own-http-translation.md) | Global exception handlers own HTTP translation |
+| [0004](0004-log-context-vs-details.md) | `log_context` vs. `details` on `ApplicationException` |
