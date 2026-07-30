@@ -1,0 +1,267 @@
+---
+description: Structured logging standards using structlog — request/correlation ids via contextvars, log levels, and what must never be logged.
+globs: api/app/**/*.py
+paths:
+  - "api/app/**/*.py"
+alwaysApply: false
+---
+
+# Logging Standards
+
+Logging is infrastructure. It is configured once, in `app/core/logging.py`
+(`configure_logging()`, called from `main.py` lifespan startup), and used
+everywhere else through the same façade.
+
+---
+
+# The Logger
+
+Always
+
+```python
+import structlog
+
+logger = structlog.get_logger(__name__)
+```
+
+Never
+
+```python
+import logging
+
+logger = logging.getLogger(__name__)
+```
+
+Never
+
+```python
+print(...)
+```
+
+`structlog.get_logger(__name__)` works identically inside routers, use cases,
+repositories, and domain code — it does not import FastAPI, SQLAlchemy, or
+anything else framework-specific, so using it does not violate the
+framework-independence rules in `07-use-cases.mdc` or `08-repositories.mdc`.
+
+---
+
+# Structured Events, Not Strings
+
+Log an event name plus keyword fields. Never interpolate values into the
+message string.
+
+Good
+
+```python
+logger.warning("student_already_enrolled", student_id=student.id, exam_id=exam.id)
+```
+
+Bad
+
+```python
+logger.warning(f"Student {student.id} is already enrolled in exam {exam.id}")
+```
+
+The event name is a stable, greppable identifier (snake_case, like an error
+code). Values belong in fields, not in the sentence.
+
+---
+
+# request_id vs correlation_id
+
+`RequestContextMiddleware` (`app/core/middleware.py`) binds both to
+`structlog.contextvars` for the lifetime of every request. Every log call
+made anywhere during that request automatically includes them — never pass
+`Request` into a use case or repository just to read an id back out.
+
+- `request_id` — identifies this one hop (this FastAPI process, this
+  request). Always freshly generated here. Use it to debug what happened
+  inside this service.
+- `correlation_id` — the id that must survive across process/service
+  boundaries (Next.js → FastAPI → queue → worker → email). Read from an
+  incoming `X-Correlation-ID` header when present, otherwise generated. When
+  a use case later publishes to a queue, calls an external API, or triggers
+  a background job, propagate `correlation_id` (read it via
+  `structlog.contextvars.get_contextvars()`) to the outbound call/message so
+  every hop's logs stay joinable on that one field, per `04-async.mdc`'s
+  guidance to use `ContextVar` for request-scoped tracing context instead of
+  globals or manual parameter threading.
+
+---
+
+# Three Event Types
+
+Do not confuse business events, application failures, and HTTP access logs.
+They answer different questions and are not duplicates when named distinctly.
+
+| Event type | Example | Who logs |
+|---|---|---|
+| Business event | `exam_approval_failed`, `payment_declined` | Use case (optional) |
+| Application failure | `application_exception` | Global handler (once) |
+| HTTP access | `request_completed` | Middleware (once) |
+
+**Default for propagated failures:** attach context via `log_context` on the
+exception; the handler logs once. A separate `logger.*` before `raise` is
+allowed only when recording a **distinct** business or infrastructure event
+whose meaning is not captured by `application_exception` alone.
+
+---
+
+# Exception Logging
+
+Full mechanics — single log line per exception, `log_context` merged from
+the full `__cause__` chain (inner layers first, outer wins on conflict),
+reserved field names (`code`, `message`, `status_code`, `exc_info`, and the
+`cause_*`/`root_cause_*` fields) — live in `12-errors.mdc`'s "Logging" and
+"Log Context vs Details" sections; this file only adds the event-type
+framing above ("Three Event Types"). A separate `logger.*` before `raise`
+is permitted only for a distinct business or infrastructure event, never
+as a restatement of the failure itself.
+
+---
+
+# One Line Per Request
+
+The middleware emits exactly one line per request. Normally that is
+`request_completed` at **INFO**, with `status_code`, `duration_ms`, and
+`outcome` (`success` / `client_error` / `server_error`). This is the
+project's HTTP access log — do not duplicate it in routers or use cases.
+Use `outcome` and `status_code` for filtering; do not promote access logs
+to WARNING or ERROR based on status code.
+
+If `call_next()` itself raises — e.g. `asyncio.CancelledError` on a client
+disconnect, which is a `BaseException`, not an `Exception`, so
+`unhandled_exception_handler` (registered for `Exception` only) never sees
+it — the middleware logs `request_cancelled` at WARNING with `duration_ms`
+instead, then re-raises unchanged. Never swallow it: `04-async.mdc` requires
+cancellation to propagate. Without this, such a request would produce zero
+log lines, silently breaking the "exactly one line per request" guarantee.
+
+`request_started` is logged at **DEBUG only**. It exists for local
+troubleshooting. At the default `LOG_LEVEL=INFO` it never renders, which
+matters at scale: doubling every request into a `started` + `completed` pair
+doubles log volume for no operational benefit once `completed` already
+carries the status and timing. Never promote `request_started` to INFO.
+
+---
+
+# Tracebacks on Application Failures
+
+Full exception tracebacks (`exc_info`) on `application_exception` are
+included only when `settings.debug` is true. `LOG_LEVEL` is a separate
+knob — it controls which events are emitted, never traceback verbosity.
+Regardless of `debug`, the handler always logs compact `cause_type`/
+`cause_message` (immediate cause) and `root_cause_type`/`root_cause_message`
+(innermost cause, when different) — see `12-errors.mdc`'s "Exception
+Chaining". `unhandled_exception` always includes `exc_info` (CRITICAL),
+since for a truly unanticipated failure the traceback is the only
+diagnostic signal available.
+
+---
+
+# Log Levels
+
+Match the exception-to-level table in `12-errors.mdc` exactly:
+
+| Category | Level |
+|---|---|
+| Validation (`ValidationException`, `RequestValidationError`) | INFO |
+| Business failures (`AuthenticationException`, `AuthorizationException`, `NotFoundException`, `ConflictException`, `BusinessRuleViolation`) | WARNING |
+| Infrastructure failures (`PersistenceException`, `ExternalServiceException`, `ServiceUnavailableException`) | ERROR |
+| Unexpected/unhandled exceptions | CRITICAL |
+
+This mapping lives in `app/core/exception_handlers.py`
+(`_LOG_METHOD_BY_EXCEPTION`). Do not reintroduce ad hoc `>=500` / `>=400`
+branching — extend the table instead when adding new exception types.
+
+The one sanctioned exception is `http_exception_handler`, which logs
+`StarletteHTTPException` by status-code bucket because that type was never
+part of `_LOG_METHOD_BY_EXCEPTION` — it carries no business meaning to key a
+level off of. See `12-errors.mdc`'s "HTTPException Logging".
+
+---
+
+# Never Log
+
+Passwords, tokens, cookies, `Authorization` headers, API keys, secrets,
+credit card data, or other personal identifiers — see `15-security.mdc`.
+`configure_logging()` runs every event through a redaction processor that
+masks known sensitive keys as a safety net, but that is defense-in-depth,
+not permission to pass secrets into a log call. Never rely on the processor
+to save a careless `logger.info("login", password=password)`.
+
+---
+
+# Redaction Is a Safety Net, Not a Guarantee
+
+`_redact_sensitive` recurses into `dict`s and `list`s of `dict`s, matching
+keys against a known-sensitive list. It cannot see inside arbitrary Python
+objects (ORM models, domain entities, custom classes) — it only understands
+mappings and sequences. Never log a domain or ORM object directly:
+
+Bad
+
+```python
+logger.info("bulk_import", users=[user_model, ...])
+```
+
+Good
+
+```python
+logger.info("bulk_import", user_ids=[u.id for u in user_models])
+```
+
+Log explicit, minimal, primitive fields. The redactor is the last line of
+defense against a forgotten key name, not a substitute for choosing what to
+log in the first place.
+
+---
+
+# Validation Errors Carry Raw Input
+
+Pydantic's `exc.errors()` includes the raw offending value under `input` for
+every field, including ones like `password`. `_redact_sensitive` cannot help
+here — the key is `input`, not `password`, so it never matches
+`_SENSITIVE_KEYS`. `request_validation_exception_handler` strips `input`
+from every error before it reaches either the log call or the client
+response (`details.errors`). Never reintroduce raw `exc.errors()` output
+into a log call or response body — full standards: `12-errors.mdc`.
+
+---
+
+# Cursor and Claude MUST NEVER
+
+Generate `print()` for debugging.
+
+Generate `logging.getLogger(...)` — use `structlog.get_logger(__name__)`.
+
+Generate f-string/`%s`-interpolated log messages — use event + keyword fields.
+
+Generate `request_started` at INFO or above.
+
+Generate a second per-request access-log line outside `RequestContextMiddleware`.
+
+Generate passwords, tokens, cookies, or secrets as log fields.
+
+Generate manual `request_id`/`correlation_id` parameters threaded through use
+cases or repositories — read them from `structlog.contextvars` instead.
+
+Generate log level branching that diverges from the `12-errors.mdc` table
+(outside the sanctioned `http_exception_handler` status-bucket exception).
+
+Generate a domain or ORM object as a raw log field value — log explicit
+primitive fields instead.
+
+Generate raw `exc.errors()` (with `input` intact) into a log call.
+
+Generate a second `logger.*` call for a failure the global exception handler
+will already log — use `log_context` on the exception instead.
+
+---
+
+# Final Principle
+
+Logging is one pipeline, configured once, used the same way at every layer.
+`request_id` and `correlation_id` travel automatically via contextvars so
+business code never needs to know about HTTP. Log levels are a fixed
+function of exception type, not a per-call judgment call.

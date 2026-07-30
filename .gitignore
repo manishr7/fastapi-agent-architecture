@@ -1,0 +1,42 @@
+# PEXM Exams monorepo — shared ignores (see also api/.gitignore; no web/
+# directory exists in this copy, so web/.gitignore does not apply here)
+
+# --- OS & editors ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.sublime-*
+
+# --- Local AI-tool settings (machine-specific, not shared) ---
+.claude/settings.local.json
+.cursor/settings.local.json
+
+# --- Root environment & secrets ---
+# Prefer api/.env and web/.env.local for app config.
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+credentials.json
+secrets/
+
+# --- Docker (local overrides; commit compose/Dockerfile templates) ---
+docker-compose.override.yml
+*.override.yml
+
+# --- Logs & caches at repo root ---
+logs/
+*.log
+.cache/
+
+# --- Optional monorepo tooling (uncomment when used) ---
+# .turbo/

@@ -1,0 +1,1100 @@
+---
+description: Defines the enterprise exception architecture, global exception handlers, error codes, and exception-to-HTTP translation for the entire application.
+globs: api/app/core/exceptions.py, api/app/core/exception_handlers.py, api/app/main.py
+paths:
+  - "api/app/core/exceptions.py"
+  - "api/app/core/exception_handlers.py"
+  - "api/app/main.py"
+alwaysApply: false
+---
+
+# ============================================================
+# Error Handling Standards
+# ============================================================
+
+# Philosophy
+
+Errors are part of the API contract.
+
+Every failure should be
+
+predictable
+
+consistent
+
+typed
+
+recoverable where appropriate.
+
+Unexpected exceptions should never leak to clients.
+
+---
+
+# Exception Flow
+
+Client
+
+↓
+
+Router
+
+↓
+
+Use Case
+
+↓
+
+Repository
+
+↓
+
+Database
+
+Errors travel upward
+
+while becoming
+
+more abstract.
+
+At the presentation boundary,
+
+**global exception handlers**
+
+convert `ApplicationException` subclasses
+
+into HTTP responses with the standard error envelope.
+
+Routers do not build error JSON.
+
+Never expose infrastructure exceptions.
+
+---
+
+# Global Exception Handlers
+
+All HTTP error translation is centralized.
+
+Location
+
+```text
+api/app/core/exception_handlers.py
+```
+
+Registration occurs in `create_app()` in `main.py` (after `FastAPI(...)` is created).
+
+Handlers MUST
+
+- map each `ApplicationException` subclass to one HTTP status (see Recommended Mapping)
+- build responses using the envelope in `10-response-format.mdc`
+- log unexpected failures; log business failures at appropriate severity
+- never expose stack traces, SQL, or internal details to clients
+
+Handlers MAY register for
+
+- project `ApplicationException` types
+- `fastapi.exceptions.RequestValidationError`
+- `pydantic.ValidationError` (when raised outside FastAPI request validation)
+- a final catch-all for unexpected `Exception` → 500
+
+FastAPI `RequestValidationError` uses **422** and the same error envelope shape.
+
+Routers MUST NOT
+
+- wrap use cases in `try/except` for application exceptions
+- return manual `JSONResponse` error bodies
+- duplicate handler logic per endpoint
+
+---
+
+# Layer Responsibilities
+
+Router
+
+↓
+
+Invoke use case;
+
+let exceptions propagate to global handlers.
+
+Use Case
+
+↓
+
+Raise business exceptions.
+
+Repository
+
+↓
+
+Translate persistence exceptions.
+
+Database
+
+↓
+
+Enforce constraints.
+
+Global exception handlers
+
+↓
+
+Map application exceptions to HTTP + standard error envelope.
+
+---
+
+# Exception Hierarchy
+
+Use a shared exception hierarchy rooted at `ApplicationException`.
+
+All custom application exceptions MUST inherit `ApplicationException`.
+
+Sibling types (examples — not a single inheritance chain):
+
+- `ValidationException`
+- `AuthenticationException`
+- `AuthorizationException`
+- `ConflictException`
+- `NotFoundException`
+- `PersistenceException`
+- `ExternalServiceException`
+- `BusinessRuleViolation`
+- `ServiceUnavailableException`
+
+Domain-specific types (e.g. `StudentAlreadyEnrolled`) SHOULD inherit the appropriate sibling (often `BusinessRuleViolation` or `ConflictException`).
+
+---
+
+# Exception Ownership
+
+Global exception handlers
+
+↓
+
+Convert `ApplicationException` to HTTP responses.
+
+Routers
+
+↓
+
+Do not handle application exceptions locally.
+
+Use Cases
+
+↓
+
+Raise business exceptions.
+
+Repositories
+
+↓
+
+Raise persistence exceptions.
+
+Never reverse ownership.
+
+---
+
+# HTTPException
+
+Avoid `HTTPException` for business failures.
+
+Prefer typed `ApplicationException` subclasses.
+
+`HTTPException` is allowed only in
+
+- `app/core/exception_handlers.py`
+- rare presentation-only cases documented in code
+
+Never raise `HTTPException`
+
+inside
+
+Use Cases
+
+Repositories
+
+Domain
+
+Validators
+
+Endpoint bodies
+
+---
+
+# HTTPException Logging
+
+`StarletteHTTPException` has no business-exception hierarchy to key a log
+level off of — it only carries a raw `status_code`. `http_exception_handler`
+therefore logs by status-code bucket (`>= 500` → ERROR, otherwise WARNING)
+rather than the `_LOG_METHOD_BY_EXCEPTION` table, which only applies to
+`ApplicationException` subclasses. This is not the ad-hoc `>=400`/`>=500`
+branching `21-logging.mdc` warns against reintroducing — that warning
+concerns bypassing the typed-exception table; `StarletteHTTPException` was
+never part of that table, since most instances are framework-generated
+(404 route-not-found, 405 method-not-allowed) rather than raised by
+application code.
+
+---
+
+# Request Validation (FastAPI / Pydantic)
+
+Invalid request shape (body, query, path)
+
+is handled by FastAPI before the router runs.
+
+Register a handler for `RequestValidationError`.
+
+Status code
+
+↓
+
+422
+
+Use the standard error envelope.
+
+Do not confuse with application `ValidationException` (typically **400**).
+
+Pydantic's `exc.errors()` includes the raw offending value under `input` for
+every field, including fields like `password`. `request_validation_exception_handler`
+strips `input` from every error before it reaches either `details.errors` in
+the response or the log call — full standards: `21-logging.mdc`. Never
+reintroduce raw `exc.errors()` output into a log call or response body.
+
+---
+
+# Domain Exceptions
+
+Domain exceptions represent
+
+business failures.
+
+Examples
+
+StudentAlreadyEnrolled
+
+SchoolClosed
+
+MaximumAttemptsExceeded
+
+DuplicateAcademicYear
+
+InsufficientBalance
+
+---
+
+# Validation Exceptions
+
+Validation failures
+
+must raise
+
+ValidationException
+
+not generic Exception.
+
+---
+
+# Not Found
+
+Missing resources
+
+must raise
+
+NotFoundException.
+
+Avoid returning
+
+None
+
+for exceptional cases.
+
+---
+
+# Conflict
+
+Uniqueness violations
+
+must become
+
+ConflictException.
+
+Never expose
+
+IntegrityError.
+
+---
+
+# Authorization
+
+Permission failures
+
+must raise
+
+AuthorizationException.
+
+---
+
+# Authentication
+
+Authentication failures
+
+must raise
+
+AuthenticationException.
+
+---
+
+# Persistence
+
+Repositories translate
+
+SQLAlchemy exceptions
+
+into persistence exceptions.
+
+Never leak
+
+IntegrityError
+
+OperationalError
+
+ProgrammingError
+
+DBAPIError
+
+---
+
+# External Services
+
+Failures from
+
+email
+
+RabbitMQ
+
+Redis
+
+payment providers
+
+third-party APIs
+
+must become
+
+ExternalServiceException
+
+or specialized subclasses.
+
+---
+
+# Business Rules
+
+Business failures
+
+must be explicit.
+
+Bad
+
+raise Exception("Invalid")
+
+Good
+
+raise SchoolAlreadyPublished()
+
+---
+
+# Error Codes
+
+Every exception
+
+must contain
+
+a stable
+
+machine-readable
+
+error code.
+
+Examples
+
+USER_NOT_FOUND
+
+EMAIL_ALREADY_EXISTS
+
+INVALID_FILE
+
+ACCESS_DENIED
+
+DATABASE_TIMEOUT
+
+---
+
+# Error Messages
+
+Messages should be
+
+human-readable
+
+stable
+
+non-sensitive.
+
+Avoid implementation details.
+
+---
+
+# Error Details
+
+Additional context belongs
+
+inside
+
+details.
+
+Never place
+
+debug information
+
+inside messages.
+
+---
+
+# Log Context vs Details
+
+`details` is part of the API contract — it is serialized to the client via
+`_envelope_json` in `exception_handlers.py`. Never put internal-only
+information there (ids not meant to be inferred, driver text, entity state).
+
+`ApplicationException.log_context` is the sibling field for that: a
+`dict[str, Any]` merged into the global handler's log line
+(`application_exception_handler`) but never serialized to a response. Use it
+when a failure should carry diagnostic fields (e.g. `student_id`, `exam_id`)
+without exposing them to the client.
+
+Good
+
+```python
+raise ConflictException(
+    message="Report already published",
+    code="REPORT_ALREADY_PUBLISHED",
+    log_context={"report_id": report_id},
+)
+```
+
+Bad
+
+```python
+raise ConflictException(
+    message="Report already published",
+    code="REPORT_ALREADY_PUBLISHED",
+    details={"report_id": report_id},  # leaks an internal id to the client
+)
+```
+
+Fields named `code`, `message`, `status_code`, or `exc_info` inside
+`log_context` are ignored — the handler always sets those itself.
+
+---
+
+# Stack Traces
+
+Never expose
+
+stack traces
+
+to API consumers.
+
+Stack traces belong
+
+only in logs.
+
+---
+
+# Logging
+
+Global exception handlers log every `ApplicationException` exactly once, at
+the level `Logging Levels` specifies. A use case or repository that is about
+to `raise` (or re-raise via `... from exc`) an `ApplicationException` MUST
+NOT also call `logger.*` for that same failure — that produces two log
+lines for one incident. Attach extra diagnostic fields via `log_context`
+instead (see "Log Context vs Details").
+
+Only log directly in a use case when a failure is caught and handled — i.e.
+NOT re-raised as an `ApplicationException` — since nothing downstream will
+log it otherwise.
+
+Unexpected exceptions
+
+must be logged
+
+by the catch-all handler (`unhandled_exception_handler`, CRITICAL).
+
+---
+
+# Logging Levels
+
+Validation
+
+↓
+
+INFO
+
+Business failures
+
+↓
+
+WARNING
+
+Infrastructure failures
+
+↓
+
+ERROR
+
+Unexpected failures
+
+↓
+
+CRITICAL
+
+---
+
+# Database Errors
+
+Translate
+
+Unique constraint
+
+↓
+
+ConflictException
+
+Foreign key violation
+
+↓
+
+ValidationException
+
+Missing row
+
+↓
+
+NotFoundException
+
+Timeout
+
+↓
+
+PersistenceException
+
+---
+
+# Retryable Errors
+
+Retryable failures
+
+should be identifiable.
+
+Examples
+
+Database timeout
+
+Deadlock
+
+Temporary network failure
+
+External API timeout
+
+---
+
+# Non-Retryable Errors
+
+Examples
+
+Validation
+
+Authorization
+
+Authentication
+
+Business rule violations
+
+Duplicate data
+
+---
+
+# Fail Fast
+
+Detect failures
+
+as early as possible.
+
+Avoid executing
+
+unnecessary work.
+
+---
+
+# Exception Chaining
+
+Preserve root cause.
+
+Use exception chaining.
+
+Example
+
+raise PersistenceException(...) from exc
+
+Never discard
+
+original exceptions.
+
+`application_exception_handler` merges `log_context` from the full
+`__cause__` chain and always logs compact `cause_type`/`cause_message`
+(the immediate cause) plus `root_cause_type`/`root_cause_message` (the
+innermost cause in the chain, when it differs from the immediate one) —
+e.g. for `ServiceUnavailableException -> PersistenceException -> the raw
+driver error`, `cause_*` is the curated boundary message and `root_cause_*`
+is the actual driver failure. Both are truncated/sanitized single-line
+strings, safe for production logs. Full tracebacks (`exc_info`) are
+attached only when `settings.debug` is true — `LOG_LEVEL` controls which
+*events* are emitted, not traceback verbosity; the two are independent
+knobs. Root cause detail never enters `details` or the client response.
+This only works if the chain is preserved — never wrap a caught failure
+without `from exc`.
+
+`cause_message`/`root_cause_message` are truncated (`_sanitize_cause_message`)
+and reflect only what the exception's own `str()` happens to contain. If a
+repository's underlying error message wouldn't be specific or stable enough
+on its own (or risks being truncated away), attach the important fields
+explicitly via `log_context` (e.g. `log_context={"operation": "ping",
+"driver": "asyncmy"}`) instead of relying on message-string parsing.
+
+---
+
+# Recovery
+
+Recover only
+
+when recovery
+
+is deterministic.
+
+Never silently ignore failures.
+
+---
+
+# Generic Exception
+
+Avoid catching
+
+Exception
+
+unless
+
+at application boundaries.
+
+Catch specific exceptions.
+
+---
+
+# Silent Failures
+
+Never
+
+pass
+
+ignore
+
+swallow
+
+exceptions.
+
+---
+
+# Cleanup
+
+Always clean up
+
+resources
+
+before propagating exceptions.
+
+Use
+
+finally
+
+or context managers.
+
+---
+
+# Transactions
+
+Failed transactions
+
+must rollback.
+
+Repositories never rollback.
+
+Transaction ownership
+
+belongs to Use Cases.
+
+---
+
+# Async Errors
+
+Awaited operations
+
+must propagate exceptions.
+
+Never suppress
+
+async failures.
+
+---
+
+# Timeout
+
+Timeouts
+
+should become
+
+TimeoutException
+
+or
+
+ExternalServiceException
+
+depending on origin.
+
+---
+
+# Cancellation
+
+Respect
+
+asyncio.CancelledError.
+
+Never swallow cancellation.
+
+---
+
+# Error Serialization
+
+Every API error
+
+must follow
+
+```json
+{
+    "data": null,
+    "meta": {},
+    "error": {
+        "code": "...",
+        "message": "...",
+        "details": {}
+    }
+}
+```
+
+Never invent
+
+endpoint-specific
+
+error structures.
+
+---
+
+# Sensitive Information
+
+Never expose
+
+SQL
+
+table names
+
+column names
+
+filesystem paths
+
+tokens
+
+passwords
+
+connection strings
+
+internal IPs
+
+stack traces
+
+framework internals.
+
+---
+
+# Localization
+
+Messages
+
+may be localized.
+
+Error codes
+
+must remain stable.
+
+---
+
+# Monitoring
+
+Unexpected exceptions
+
+should be observable.
+
+Support
+
+logging
+
+metrics
+
+tracing
+
+alerting.
+
+---
+
+# Metrics
+
+Track
+
+validation failures
+
+authentication failures
+
+authorization failures
+
+database failures
+
+external service failures
+
+unexpected exceptions
+
+---
+
+# Testing
+
+Every custom exception
+
+should have tests.
+
+Test
+
+translation
+
+serialization
+
+logging
+
+HTTP mapping.
+
+---
+
+# Error Mapping
+
+One exception
+
+↓
+
+One HTTP status
+
+Maintain consistent mappings.
+
+---
+
+# Recommended Mapping
+
+This table is canonical for the project.
+
+`RequestValidationError` (FastAPI / Pydantic request validation)
+
+↓
+
+422
+
+`ValidationException` (application layer)
+
+↓
+
+400
+
+AuthenticationException
+
+↓
+
+401
+
+AuthorizationException
+
+↓
+
+403
+
+NotFoundException
+
+↓
+
+404
+
+ConflictException
+
+↓
+
+409
+
+BusinessRuleViolation
+
+↓
+
+422
+
+PersistenceException
+
+↓
+
+500
+
+ExternalServiceException
+
+↓
+
+502
+
+ServiceUnavailableException
+
+↓
+
+503
+
+UnexpectedException
+
+↓
+
+500
+
+---
+
+# Cursor and Claude MUST NEVER
+
+Generate HTTPException outside `app/core/exception_handlers.py` (except documented presentation-only cases)
+
+Generate per-endpoint try/except for application exceptions
+
+Generate manual error JSON in routers
+
+Generate generic Exception
+
+Generate bare except
+
+Generate silent exception handling
+
+Generate pass inside except
+
+Generate swallowed exceptions
+
+Generate SQLAlchemy exceptions outside repositories
+
+Generate stack traces in API responses
+
+Generate inconsistent error responses
+
+Generate magic error strings
+
+Generate endpoint-specific error formats
+
+Generate duplicated exception hierarchies
+
+Generate infrastructure exceptions inside Domain
+
+Generate transport exceptions inside Domain
+
+Generate print() for errors
+
+Generate sensitive information inside messages
+
+Generate rollback inside repositories
+
+Generate a `logger.*` call in a use case or repository for an `ApplicationException` that is about to propagate or be re-raised
+
+Generate internal-only diagnostic fields (ids, driver text) inside `details` — use `log_context`
+
+Generate raw `exc.errors()` (with `input` intact) into a log call or response body
+
+---
+
+# Example Flow
+
+IntegrityError
+
+↓
+
+Repository
+
+↓
+
+ConflictException
+
+↓
+
+Use Case
+
+↓
+
+(propagate)
+
+Global exception handler
+
+↓
+
+HTTP 409
+
+↓
+
+Standard Error Response
+
+---
+
+# Exception Checklist
+
+Every exception should satisfy
+
+✓ Typed
+
+✓ Stable error code
+
+✓ Human-readable message
+
+✓ Optional details
+
+✓ Serializable
+
+✓ Logged appropriately
+
+✓ Layer appropriate
+
+✓ Tested
+
+✓ No infrastructure leakage
+
+✓ HTTP mapping defined
+
+---
+
+# Final Principle
+
+Errors are domain concepts, not implementation details.
+
+Infrastructure failures should be translated into application exceptions.
+
+Global exception handlers should translate application exceptions into HTTP responses with the standard envelope.
+
+Clients should never know whether a failure originated from SQLAlchemy, MySQL, Redis, RabbitMQ, or any other internal component.
+
+A well-designed error system makes failures predictable, secure, observable, and easy to maintain.

@@ -1,0 +1,941 @@
+---
+description: Defines Repository standards for persistence, query organization, ORM mapping, and database interaction. Repositories isolate SQLAlchemy from the rest of the application.
+globs: api/app/**/repositories/**/*.py
+paths:
+  - "api/app/**/repositories/**/*.py"
+alwaysApply: false
+---
+
+# ============================================================
+# Repository Standards
+# ============================================================
+
+# Philosophy
+
+Repositories are the Persistence Layer.
+
+Repositories isolate
+
+- SQLAlchemy
+- MySQL
+- SQL
+- ORM Models
+
+from the rest of the application.
+
+Everything above repositories should remain persistence independent.
+
+---
+
+# Responsibilities
+
+Repositories are responsible for
+
+- querying data
+- persisting data
+- mapping ORM Models
+- deleting data
+- existence checks
+- pagination
+- projections
+
+Nothing else.
+
+---
+
+# Repository Contract
+
+Repositories MUST NOT
+
+- contain business logic
+- perform authorization
+- perform authentication
+- call HTTP APIs
+- send emails
+- publish events
+- enqueue jobs
+- access FastAPI objects
+
+Repositories exist solely for persistence.
+
+---
+
+# Dependency Direction
+
+Router
+
+↓
+
+Use Case
+
+↓
+
+Repository
+
+↓
+
+Database
+
+Repositories never call
+
+Use Cases
+
+Routers
+
+Services
+
+Controllers
+
+---
+
+# Session
+
+Repositories receive
+
+AsyncSession
+
+through dependency injection.
+
+Repositories never create sessions.
+
+---
+
+# Transactions
+
+Repositories never `commit()`, `rollback()`, `begin()`, or `close()` the session.
+
+Transaction ownership belongs to use cases. See **`13-transactions.md`**.
+
+---
+
+# One Aggregate
+
+One Repository
+
+↓
+
+One Aggregate Root
+
+Avoid repositories managing unrelated entities.
+
+Good
+
+UserRepository
+
+SchoolRepository
+
+RoleRepository
+
+TeacherRepository
+
+Bad
+
+SystemRepository
+
+CommonRepository
+
+MasterRepository
+
+GlobalRepository
+
+---
+
+# Naming
+
+Repository names should describe
+
+business aggregates.
+
+Method names should describe
+
+business intent.
+
+Good
+
+find_by_email()
+
+find_active()
+
+exists()
+
+save()
+
+delete()
+
+list_schools()
+
+Bad
+
+execute()
+
+run()
+
+fetch()
+
+action()
+
+process()
+
+---
+
+# Repository Interface
+
+Public methods should be
+
+small
+
+predictable
+
+well named.
+
+Avoid exposing SQL concepts.
+
+---
+
+# SQL Isolation
+
+SQL belongs
+
+inside repositories only.
+
+No SQL should appear
+
+inside
+
+Use Cases
+
+Routers
+
+Domain
+
+Validators
+
+---
+
+# Return Types
+
+Repositories return
+
+- Domain Entities
+- Collections of Domain Entities
+- Primitive values
+- DTO projections (when explicitly intended)
+
+Repositories NEVER return ORM Models.
+
+---
+
+# ORM Models
+
+ORM Models remain private to repositories. They never leave the persistence layer.
+
+ORM model files live centrally in `app/database/models/` (for Alembic and shared Base metadata).
+
+Each ORM model file is **owned by exactly one feature module**.
+
+Only that module's repository files may import those models.
+
+No other module, use case, router, schema, or middleware may import ORM models.
+
+Cross-module data access must go through the owning module's public Use Case interface.
+
+---
+
+# Mapping
+
+Always map
+
+ORM
+
+↓
+
+Domain
+
+before returning.
+
+Always map
+
+Domain
+
+↓
+
+ORM
+
+before persistence.
+
+Never bypass mapping.
+
+---
+
+# Mapping Responsibility
+
+Mapping belongs
+
+inside repositories
+
+or dedicated mapper modules.
+
+Never map
+
+inside routers
+
+or use cases.
+
+---
+
+# Query Construction
+
+Only repositories build SQL.
+
+Other layers request
+
+business operations
+
+not SQL statements.
+
+---
+
+# Query API
+
+Always use
+
+select()
+
+Never use
+
+session.query()
+
+Never use legacy APIs.
+
+---
+
+# Read Operations
+
+Read methods should never
+
+modify persistence state.
+
+Avoid side effects.
+
+---
+
+# Write Operations
+
+Write methods should
+
+modify persistence only.
+
+Avoid unrelated work.
+
+---
+
+# Save
+
+save()
+
+should persist
+
+one aggregate.
+
+Avoid hidden updates.
+
+---
+
+# Delete
+
+delete()
+
+should perform
+
+one delete operation.
+
+Never cascade business behavior.
+
+---
+
+# Exists
+
+Prefer
+
+exists()
+
+queries
+
+over loading entire entities.
+
+---
+
+# Pagination
+
+Repositories provide
+
+pagination support.
+
+Never return
+
+unbounded collections.
+
+---
+
+# Ordering
+
+Always define
+
+explicit ordering.
+
+Never rely
+
+on database defaults.
+
+---
+
+# Filtering
+
+Filtering belongs
+
+inside repositories.
+
+Avoid leaking SQL filters
+
+to callers.
+
+Good
+
+find_active_users()
+
+Bad
+
+find(filters)
+
+---
+
+# Dynamic Queries
+
+Dynamic query builders
+
+should remain private.
+
+Expose business-oriented methods.
+
+---
+
+# Specifications
+
+Complex reusable filtering
+
+may use
+
+Specification Pattern
+
+when justified.
+
+Avoid premature abstraction.
+
+---
+
+# Raw SQL
+
+Prefer ORM.
+
+Use raw SQL
+
+only when
+
+performance
+
+or database features
+
+require it.
+
+Document the reason.
+
+---
+
+# Bulk Operations
+
+Bulk operations
+
+should be explicit.
+
+Understand
+
+ORM hooks
+
+may not execute.
+
+Never use bulk operations
+
+for ordinary business workflows.
+
+---
+
+# Lazy Loading
+
+Repositories should
+
+eagerly load
+
+required relationships.
+
+Business logic
+
+must never trigger
+
+lazy loading.
+
+---
+
+# Relationships
+
+Relationship loading
+
+must be intentional.
+
+Prefer
+
+selectinload()
+
+joinedload()
+
+where appropriate.
+
+---
+
+# N+1
+
+Repositories are responsible
+
+for preventing
+
+N+1 queries.
+
+---
+
+# Query Count
+
+Minimize
+
+database round trips.
+
+Prefer
+
+one efficient query
+
+over many small ones.
+
+---
+
+# Projections
+
+Only load
+
+required columns
+
+when full entities
+
+are unnecessary.
+
+---
+
+# Streaming
+
+Large datasets
+
+should support
+
+streaming
+
+or batching.
+
+Avoid
+
+.all()
+
+on extremely large queries.
+
+---
+
+# Concurrency
+
+Repositories should assume
+
+multiple concurrent requests.
+
+Never rely
+
+on in-memory state.
+
+---
+
+# Locking
+
+Repositories may expose
+
+locking methods
+
+when business rules require.
+
+Examples
+
+find_for_update()
+
+find_available_job()
+
+Avoid locking by default.
+
+---
+
+# Unique Constraints
+
+Allow the database
+
+to enforce uniqueness.
+
+Repositories should translate
+
+constraint violations
+
+into domain exceptions.
+
+---
+
+# Exception Translation
+
+Convert SQLAlchemy exceptions
+
+into persistence exceptions
+
+understood by
+
+the Application layer.
+
+Never expose
+
+database-specific exceptions.
+
+---
+
+# Logging
+
+Repositories may log **infrastructure events** only (retry attempts,
+deadlock recovery, circuit-breaker state) — never business events, and
+never a propagated `ApplicationException` (full rule: `12-errors.md`'s
+"Logging" section). Attach diagnostic fields via `log_context` on the
+raised exception instead.
+
+---
+
+# Configuration
+
+Repositories must not
+
+read
+
+environment variables
+
+configuration files
+
+feature flags.
+
+Inject configuration.
+
+---
+
+# Caching
+
+Repositories should remain
+
+cache agnostic.
+
+Caching belongs
+
+outside repositories — Use Cases call `Cache` directly. Full standards:
+**`22-redis.md`**.
+
+---
+
+# Async
+
+Repositories performing I/O
+
+must be asynchronous.
+
+Avoid blocking operations.
+
+---
+
+# Repository Size
+
+Target
+
+100–300 lines.
+
+Split repositories
+
+when they become
+
+large.
+
+---
+
+# Helper Methods
+
+Private helper methods
+
+are encouraged
+
+for reusable query fragments.
+
+Avoid duplicated SQL.
+
+---
+
+# Private Queries
+
+Complex SQL construction
+
+should remain private.
+
+Expose
+
+business-oriented methods only.
+
+---
+
+# Testing
+
+Repositories should be tested
+
+against
+
+a real database
+
+whenever practical.
+
+Mock SQLAlchemy minimally.
+
+---
+
+# Determinism
+
+Repository methods
+
+should be deterministic.
+
+Given identical
+
+database state
+
+↓
+
+identical results.
+
+---
+
+# Security
+
+Repositories must use
+
+parameterized SQL.
+
+Never construct SQL
+
+using string concatenation.
+
+---
+
+# Soft Deletes
+
+If soft deletes exist
+
+repositories should
+
+hide deleted rows
+
+by default.
+
+Expose dedicated methods
+
+when deleted rows
+
+must be queried.
+
+---
+
+# Auditing
+
+Repositories persist
+
+audit fields
+
+but do not decide
+
+audit policy.
+
+---
+
+# Legacy Database
+
+Respect
+
+legacy schema.
+
+Do not rename
+
+tables
+
+columns
+
+constraints
+
+inside repositories.
+
+---
+
+# Cursor and Claude MUST NEVER
+
+Generate SQL inside Use Cases
+
+Generate SQL inside Routers
+
+Generate FastAPI imports
+
+Generate APIRouter
+
+Generate Depends
+
+Generate HTTPException
+
+Generate commit()
+
+Generate rollback()
+
+Generate begin()
+
+Generate close()
+
+Generate ORM Models outside repositories
+
+Generate repositories returning ORM Models
+
+Generate business logic
+
+Generate authorization
+
+Generate authentication
+
+Generate HTTP requests
+
+Generate RabbitMQ publishing
+
+Generate email sending
+
+Generate event publishing
+
+Generate environment variable reads
+
+Generate repository-to-repository calls
+
+Generate repositories managing multiple aggregates
+
+Generate generic CRUD repositories
+
+Generate session.query()
+
+Generate SELECT *
+
+Generate unbounded queries
+
+Generate lazy-loading dependent code
+
+Generate string concatenated SQL
+
+Generate duplicated mapping logic
+
+---
+
+# Example Flow
+
+Use Case
+
+↓
+
+UserRepository.find_by_email()
+
+↓
+
+SQLAlchemy Query
+
+↓
+
+ORM Model
+
+↓
+
+Mapper
+
+↓
+
+Domain Entity
+
+↓
+
+Use Case
+
+No ORM Model leaves the repository.
+
+---
+
+# Repository Checklist
+
+Every repository should satisfy
+
+✓ One aggregate
+
+✓ Async only
+
+✓ No commits
+
+✓ No rollbacks
+
+✓ No business logic
+
+✓ Domain entities returned
+
+✓ Explicit mapping
+
+✓ Explicit ordering
+
+✓ Pagination support
+
+✓ No ORM leakage
+
+✓ No N+1 queries
+
+✓ Parameterized SQL
+
+✓ Focused methods
+
+✓ Small size
+
+✓ Tested independently
+
+---
+
+# Final Principle
+
+Repositories are translators.
+
+They translate
+
+Domain
+
+↓
+
+Persistence
+
+↓
+
+Domain
+
+They should hide every persistence detail from the rest of the application, exposing only business-oriented operations through a clean, predictable interface.

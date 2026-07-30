@@ -1,0 +1,84 @@
+[project]
+name = "pexm-exams-api"
+version = "0.1.0"
+description = "PEXM Exams FastAPI backend"
+readme = "../README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "alembic>=1.14.0",
+    "asyncmy>=0.2.9",
+    "cryptography>=42.0.0",
+    "fastapi>=0.115.0",
+    "pydantic-settings>=2.6.0",
+    "redis>=5.2.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "structlog>=26.1.0",
+    "uvicorn[standard]>=0.32.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "httpx>=0.28.0",
+    "pre-commit>=4.0.0",
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+show-fixes = true
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    "migrations/versions",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle
+    "F",      # pyflakes
+    "W",      # warnings
+    "I",      # import sorting
+    "UP",     # pyupgrade
+    "B",      # bugbear
+    "C4",     # comprehensions
+    "SIM",    # simplify
+    "RET",    # better returns
+    "RUF",    # Ruff rules
+    "N",      # naming
+    "ASYNC",  # async issues
+]
+
+ignore = [
+    "E501",
+]
+
+fixable = ["ALL"]
+
+
+[tool.ruff.lint.per-file-ignores]
+"app/core/exceptions.py" = ["N818"]
+
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+docstring-code-format = true
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

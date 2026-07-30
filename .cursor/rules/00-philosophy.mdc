@@ -1,0 +1,527 @@
+---
+description: Backend engineering constitution — architecture priorities, SOLID, layering, and non-negotiable design rules.
+globs: api/app/main.py, api/app/core/**/*.py
+paths:
+  - "api/app/main.py"
+  - "api/app/core/**/*.py"
+alwaysApply: false
+---
+# Backend Engineering Constitution
+
+## Purpose
+
+This project is intended to be a long-lived enterprise application.
+
+Every architectural decision MUST prioritize:
+
+- Maintainability
+- Readability
+- Predictability
+- Correctness
+- Scalability
+- Testability
+- Explicitness
+
+over
+
+- Cleverness
+- Premature optimization
+- Code golfing
+- Hidden abstractions
+- Magic behavior
+
+The objective is to produce software that remains understandable and maintainable after many years of development.
+
+---
+
+# General Principles
+
+## Single Responsibility
+
+Every class MUST have one reason to change.
+
+Every function MUST perform one logical operation.
+
+Every module MUST represent one domain or concern.
+
+Large functions MUST be decomposed.
+
+---
+
+## Explicit Over Implicit
+
+Prefer explicit code over hidden behavior.
+
+Avoid "magic."
+
+A developer unfamiliar with the project should understand what the code does without tracing multiple layers of indirection.
+
+Avoid hidden side effects.
+
+Never rely on undocumented framework behavior.
+
+---
+
+## Readability First
+
+Readable code is preferred over short code.
+
+Avoid dense one-liners.
+
+Avoid deeply nested conditions.
+
+Prefer descriptive variable names.
+
+Prefer early returns.
+
+Prefer composition over clever abstractions.
+
+---
+
+## Predictability
+
+Every function should behave consistently.
+
+The same input should always produce the same output unless explicitly documented otherwise.
+
+Avoid hidden state.
+
+Avoid global mutable state.
+
+Avoid unexpected mutations.
+
+---
+
+## Enterprise First
+
+Code should be written as though:
+
+- another team will maintain it
+- another service will consume it
+- another developer will debug it
+- another company will audit it
+
+Never optimize for writing code quickly.
+
+Optimize for maintaining code safely.
+
+---
+
+# SOLID
+
+The entire project MUST follow SOLID principles.
+
+Single Responsibility Principle
+
+Open Closed Principle
+
+Liskov Substitution Principle
+
+Interface Segregation Principle
+
+Dependency Inversion Principle
+
+Violations should be considered architectural issues.
+
+---
+
+# DRY
+
+Avoid duplicated business logic.
+
+Small duplication is acceptable.
+
+Large duplicated business logic is not.
+
+Do not create abstractions too early.
+
+The Rule of Three applies.
+
+Only extract abstractions after the third duplication.
+
+---
+
+# KISS
+
+Keep implementations simple.
+
+Simple code scales.
+
+Complexity should only exist when justified.
+
+Avoid unnecessary abstraction layers.
+
+Avoid unnecessary inheritance.
+
+Avoid unnecessary metaprogramming.
+
+---
+
+# YAGNI
+
+Do not build features that are not currently required.
+
+Future extensibility is important.
+
+Premature implementation is not.
+
+The architecture should support extension without implementing speculative functionality.
+
+This applies to speculative features and integrations with no current
+consumer — not to the foundational structural conventions defined
+elsewhere in this rule set (module layout, layering, the core exception
+categories), which this project treats as fixed vocabulary rather than
+built-ahead-of-need functionality.
+
+---
+
+# Composition
+
+Prefer composition over inheritance.
+
+Inheritance should be rare.
+
+Inheritance should model true "is-a" relationships.
+
+Utility inheritance is prohibited.
+
+---
+
+# Explicit Dependencies
+
+Every dependency should be visible.
+
+Hidden dependencies are prohibited.
+
+Dependency injection should make dependencies obvious.
+
+---
+
+# Separation of Concerns
+
+Every layer has one responsibility.
+
+Routing
+
+Business Logic
+
+Persistence
+
+Validation
+
+Serialization
+
+Authentication
+
+Authorization
+
+Configuration
+
+Logging
+
+Monitoring
+
+should remain independent.
+
+Business logic must never leak into infrastructure.
+
+Infrastructure must never leak into business logic.
+
+---
+
+# Domain Driven Thinking
+
+Business rules belong to the domain.
+
+Frameworks are implementation details.
+
+Database schemas are persistence details.
+
+HTTP is a transport mechanism.
+
+The domain should remain independent from all of them.
+
+---
+
+# Architecture
+
+Router → Use Case → Repository → Database, composed through `app/api/`.
+Full diagram and layer responsibilities: **`project.mdc`**.
+
+No shortcuts are allowed. Every layer has a single responsibility.
+
+---
+
+# Business Logic
+
+Business logic belongs ONLY inside Use Cases.
+
+Business logic MUST NOT exist inside
+
+Routers
+
+Repositories
+
+Models
+
+Schemas
+
+Validators
+
+Utilities
+
+Middleware
+
+Configuration
+
+---
+
+# Database Independence
+
+The business layer must not know SQLAlchemy exists.
+
+The business layer must not know MySQL exists.
+
+The business layer should work if another persistence layer replaces SQLAlchemy.
+
+Repositories provide this abstraction.
+
+---
+
+# Framework Independence
+
+FastAPI is an implementation detail.
+
+The application should not depend on FastAPI concepts outside the presentation layer.
+
+Domain logic should remain reusable.
+
+---
+
+# Predictable APIs
+
+Every endpoint should behave consistently.
+
+Naming
+
+Responses
+
+Errors
+
+Validation
+
+Pagination
+
+Authentication
+
+Authorization
+
+must follow consistent conventions.
+
+---
+
+# Fail Fast
+
+Detect invalid state as early as possible.
+
+Never continue after detecting corrupted state.
+
+Never silently ignore errors.
+
+Never swallow exceptions.
+
+---
+
+# Defensive Programming
+
+Assume
+
+client input is invalid
+
+network calls fail
+
+database operations fail
+
+files disappear
+
+timeouts happen
+
+dependencies become unavailable
+
+Code should handle failure gracefully.
+
+---
+
+# Code Should Explain Itself
+
+Good names are preferred over comments.
+
+Comments explain WHY.
+
+Code explains WHAT.
+
+Never use comments to compensate for poor naming.
+
+---
+
+# Error Messages
+
+Errors should be actionable.
+
+Errors should explain
+
+what failed
+
+why it failed
+
+how to fix it
+
+Never expose internal implementation.
+
+---
+
+# Consistency
+
+Consistency is more valuable than personal preference.
+
+If two implementations solve the same problem, use the project standard.
+
+Do not invent new patterns.
+
+---
+
+# Backward Compatibility
+
+When a project integrates with an existing or legacy system, backward
+compatibility becomes a priority.
+
+Avoid breaking existing contracts.
+
+Avoid unnecessary schema changes.
+
+Prefer migrations over rewrites.
+
+---
+
+# Legacy Integration
+
+When legacy database structures are in play, respect them.
+
+Do not redesign legacy schemas without explicit approval.
+
+Adapt new code to existing contracts whenever practical.
+
+---
+
+# Performance Philosophy
+
+Do not optimize prematurely.
+
+Measure first.
+
+Optimize second.
+
+Never sacrifice maintainability for insignificant performance gains.
+
+Optimize only proven bottlenecks.
+
+---
+
+# Security Philosophy
+
+Security is the default.
+
+Never trust external input.
+
+Validate everything.
+
+Escape where appropriate.
+
+Use least privilege.
+
+Prefer secure defaults.
+
+---
+
+# Testing Philosophy
+
+Code that cannot be tested is poorly designed.
+
+Design for testability.
+
+Dependencies should be injectable.
+
+Business logic should be isolated.
+
+Avoid hidden state.
+
+---
+
+# Documentation Philosophy
+
+Architecture should be discoverable.
+
+Complex decisions should be documented.
+
+Public APIs should be documented.
+
+Important trade-offs should be documented.
+
+---
+
+# AI Code Generation Rules
+
+Generated code MUST follow the project architecture.
+
+Generated code MUST NOT invent new architectural patterns.
+
+Generated code MUST conform to existing conventions.
+
+Generated code MUST prefer consistency over creativity.
+
+When multiple valid implementations exist, choose the one already used within the project.
+
+Never introduce unnecessary dependencies.
+
+Never introduce unnecessary abstractions.
+
+Never generate placeholder implementations unless explicitly requested.
+
+Never generate TODO comments instead of implementations.
+
+---
+
+# Decision Priority
+
+When multiple rules conflict, follow this priority:
+
+1. Correctness
+2. Security
+3. Data Integrity
+4. Maintainability
+5. Readability
+6. Consistency
+7. Performance
+8. Developer Convenience
+
+---
+
+# Non-Negotiable Rules
+
+Never bypass the architecture.
+
+Never duplicate business logic.
+
+Never sacrifice readability for brevity.
+
+Never optimize before measuring.
+
+Never leak infrastructure into the domain.
+
+Never expose persistence models outside repositories.
+
+Never violate separation of concerns.
+
+Always write code that another engineer can confidently modify years later.
+
+This philosophy governs every file in this repository.

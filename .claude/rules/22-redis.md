@@ -1,0 +1,158 @@
+---
+description: Redis standards — client lifecycle, cache (fail-open) vs distributed lock (fail-closed), key ownership, and what's deliberately deferred.
+globs: api/app/infrastructure/redis/**/*.py, api/app/core/config.py
+paths:
+  - "api/app/infrastructure/redis/**/*.py"
+  - "api/app/core/config.py"
+alwaysApply: false
+---
+
+# Redis Standards
+
+Redis is infrastructure, not the system of record. It lives in
+`app/infrastructure/redis/`, alongside where email/SMS/storage integrations
+would go — never under `app/database/`. The database remains the
+authoritative store; Redis only ever accelerates or coordinates access to it.
+
+This project runs multiple horizontally-scaled app instances against a
+**single** Redis instance (no Sentinel/Cluster). That single-instance-behind-
+many-pods shape is why the fail-open/fail-closed split below exists: a Redis
+outage must degrade the specific operations that depend on it, not take the
+whole fleet out of rotation at once.
+
+---
+
+# Lifecycle
+
+`app.state.redis`, created and disposed in `main.py` lifespan — the exact
+same pattern as `app.state.engine`/`session_factory`
+(`01-folder-structure.md`'s "Application State" section). One client per
+process, reused across every request; never created per request, never a
+module-level global.
+
+`app/infrastructure/redis/client.py` provides factory functions only:
+`create_redis_client(settings)`, `dispose_redis(client)` — mirroring
+`app/database/session.py`'s `create_engine_from_settings`/`dispose_engine`.
+
+`app/infrastructure/redis/dependencies.py` provides `get_redis(request)`,
+reading the already-created client from `request.app.state.redis` — mirrors
+`get_db()`. No connection creation, no pooling logic, no configuration
+inside the dependency itself; the async client already manages its own
+connection pool (`redis_max_connections` in `Settings`).
+
+---
+
+# Cache: Fails Open
+
+`Cache` (`cache.py`) wraps `get`/`set`/`delete`/`invalidate_pattern`. It
+catches `redis.exceptions.RedisError` internally, logs once at WARNING
+(`cache_unavailable`), and returns a miss / no-op — it never raises. Redis
+is a performance optimization here; a cache-read failure must fall through
+to the database, never fail the request. Do not log on an ordinary cache
+miss (`get` returning `None` with no exception) — only failures are logged,
+per `21-logging.md`'s "log failures, not routine operations."
+
+`Cache` is called from **Use Cases**, not Repositories —
+`08-repositories.md` keeps repositories cache-agnostic; introducing a
+"CacheRepository" layer between them is unnecessary indirection at this
+project's current scale (Rule of Three, `00-philosophy.md`). A Use Case
+checks `Cache.get()`, falls back to the repository on a miss, then calls
+`Cache.set()`.
+
+---
+
+# Locks: Fail Closed
+
+`acquire_lock(client, key, ...)` (`locks.py`) is an async context manager
+wrapping `redis.asyncio.lock.Lock` — do not hand-roll SETNX/EXPIRE; the
+library already implements safe acquire/release (token-based ownership, Lua
+release script). Unlike `Cache`, this fails closed: if Redis is unreachable
+or the lock isn't acquired within `blocking_timeout_seconds`, it raises
+`ServiceUnavailableException` (the existing exception, `12-errors.md` —
+never invent a new `LockUnavailableException` type) rather than letting the
+caller proceed without the exclusivity guarantee it asked for.
+
+Always TTL-bound (`ttl_seconds`, default 30s). If a pod holding the lock is
+killed mid-operation (OOM, deploy rollout, crash), the lock must expire on
+its own — otherwise one dead pod permanently blocks every other replica.
+`04-async.md`'s "never let Redis operations hang indefinitely" applies
+doubly here: an un-expiring lock is worse than a hung request.
+
+Use locks only for operations that genuinely require cross-instance mutual
+exclusion under horizontal scaling. Most requests need no lock at all.
+
+---
+
+# Keys
+
+`keys.build_key(*parts)` fixes the separator convention only. Domain-
+specific key names (`"student"`, `"otp"`) belong to the owning module, not
+to this shared infra file — the same ownership principle
+`08-repositories.md` applies to ORM models. Never embed raw PII (email,
+phone) directly as literal key content without justification; a failed
+cache/lock operation logs the key.
+
+---
+
+# Deliberately Deferred
+
+Two things ChatGPT-style "complete Redis architecture" advice bundles in on
+day one were deferred here after explicit review — recorded so a future
+session doesn't silently reintroduce them wrong:
+
+- **Rate limiting.** No `rate_limit.py` exists yet — `auth`'s login/OTP
+  endpoints are still an unimplemented stub. The one decision that **is**
+  locked in now: rate limiting must be Redis-backed, never a per-process
+  in-memory backend (the default most libraries ship with) — under
+  horizontal scaling, in-memory limits are trivially bypassed by hitting a
+  different pod.
+- **Pub/sub.** No local per-process cache layer exists (no in-memory LRU on
+  top of Redis), so there's no cross-instance cache-invalidation broadcast
+  to build. No downstream consumer (worker, notification service) needs
+  domain events yet either. Build `pubsub.py` only when a concrete consumer
+  exists.
+
+---
+
+# Readiness
+
+`/api/v6/ready` intentionally does **not** check Redis. Every pod shares the
+same single Redis instance — wiring it into readiness would mean one Redis
+blip fails the same check on every pod simultaneously, zeroing the entire
+fleet's traffic at once. The fail-open (`Cache`) / fail-closed (`locks`)
+split above contains the damage to whichever operations actually depend on
+Redis instead.
+
+---
+
+# Testing
+
+Mock the Redis client (`17-testing.md`'s Mocking section already lists
+Redis as an external system to mock) — never hit a real Redis server in
+automated tests, and never mock the `Cache`/`acquire_lock` code under test.
+
+---
+
+# Cursor and Claude MUST NEVER
+
+Generate a Redis client created per request or per call.
+
+Generate a module-level global Redis client.
+
+Generate a hand-rolled distributed lock (raw SETNX/EXPIRE) instead of
+`redis.asyncio.lock.Lock`.
+
+Generate a lock without a TTL.
+
+Generate `Cache` calls inside repositories — call from Use Cases only.
+
+Generate a new exception type for lock/Redis failures — reuse
+`ServiceUnavailableException`.
+
+Generate an in-memory (non-Redis) rate limiter once rate limiting is built.
+
+Generate `pubsub.py` or `rate_limit.py` without a concrete, current consumer.
+
+Generate Redis wired into `/ready` while Redis remains a single instance.
+
+Generate raw PII as literal cache/lock key content.

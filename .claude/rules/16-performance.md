@@ -1,0 +1,937 @@
+---
+description: Defines enterprise performance standards, scalability principles, efficient resource usage, database optimization, async performance, and observability guidelines.
+globs: api/app/**/repositories/**/*.py, api/app/modules/**/router.py, api/app/infrastructure/**/*.py
+paths:
+  - "api/app/**/repositories/**/*.py"
+  - "api/app/modules/**/router.py"
+  - "api/app/infrastructure/**/*.py"
+alwaysApply: false
+---
+
+# ============================================================
+# Performance Standards
+# ============================================================
+
+# Philosophy
+
+Performance is a feature.
+
+Correctness comes first.
+
+Maintainability comes second.
+
+Performance comes third.
+
+Optimize only after measuring.
+
+Never sacrifice correctness
+for premature optimization.
+
+---
+
+# Performance Hierarchy
+
+Optimize in this order
+
+Architecture
+
+↓
+
+Database
+
+↓
+
+Network
+
+↓
+
+Algorithms
+
+↓
+
+Memory
+
+↓
+
+CPU
+
+↓
+
+Micro-optimizations
+
+Avoid focusing on the bottom
+before improving the top.
+
+---
+
+# Performance Budget
+
+Every feature should be designed
+
+to scale
+
+predictably
+
+under production load.
+
+Avoid assumptions
+
+based on local development.
+
+---
+
+# Measure First
+
+Never optimize
+
+without evidence.
+
+Use
+
+profiling
+
+metrics
+
+benchmarking
+
+query analysis
+
+before changing code.
+
+---
+
+# Async
+
+Use asynchronous code
+
+for I/O-bound operations.
+
+Avoid blocking calls
+
+inside async functions.
+
+Examples
+
+database
+
+HTTP
+
+Redis
+
+RabbitMQ
+
+file I/O
+
+---
+
+# Blocking Operations
+
+Never use
+
+time.sleep()
+
+requests
+
+blocking database drivers
+
+inside async code.
+
+Prefer
+
+await
+
+httpx.AsyncClient
+
+async SQLAlchemy
+
+---
+
+# CPU Bound Work
+
+Heavy CPU work
+
+should execute
+
+outside the request lifecycle.
+
+Examples
+
+image processing
+
+video encoding
+
+large report generation
+
+cryptographic workloads
+
+Use background workers
+
+when appropriate.
+
+---
+
+# Database First
+
+Database performance
+
+has the greatest impact
+
+on API latency.
+
+Optimize queries
+
+before optimizing Python.
+
+---
+
+# Query Count
+
+Minimize
+
+database round trips.
+
+Prefer
+
+one efficient query
+
+over many small queries.
+
+---
+
+# N+1 Queries
+
+Repositories must avoid N+1 query patterns in production paths.
+
+ORM loading strategies (`selectinload`, `joinedload`, explicit queries): **`05-sqlalchemy-part-3.md`**.
+
+---
+
+# Projection
+
+Select
+
+only required columns.
+
+Avoid loading
+
+entire entities
+
+when projections
+
+are sufficient.
+
+---
+
+# Pagination
+
+Large collections
+
+must be paginated.
+
+Never return
+
+unbounded datasets.
+
+---
+
+# Streaming
+
+Very large datasets
+
+should be streamed
+
+or processed
+
+in batches.
+
+Avoid loading
+
+large result sets
+
+fully into memory.
+
+---
+
+# Bulk Operations
+
+Use
+
+bulk operations
+
+only when
+
+business behavior
+
+does not require
+
+individual entity processing.
+
+Understand
+
+ORM lifecycle hooks
+
+may not execute.
+
+---
+
+# Transactions
+
+Keep transactions
+
+short.
+
+Never perform
+
+external I/O
+
+inside active transactions.
+
+---
+
+# Caching
+
+Caching
+
+is a performance optimization.
+
+It is not
+
+the source of truth.
+
+Only cache
+
+when measurements
+
+justify it.
+
+---
+
+# Cache Invalidation
+
+Design cache invalidation
+
+before introducing caches.
+
+Incorrect cache invalidation
+
+creates correctness issues.
+
+---
+
+# Memory Usage
+
+Avoid unnecessary
+
+copies
+
+large in-memory collections
+
+temporary objects.
+
+Process data
+
+incrementally
+
+when practical.
+
+---
+
+# Serialization
+
+Serialize
+
+only required fields.
+
+Avoid returning
+
+unused data.
+
+---
+
+# Response Size
+
+Smaller responses
+
+improve latency.
+
+Return only
+
+contracted fields.
+
+---
+
+# File Processing
+
+Process
+
+large files
+
+using streaming
+
+or chunking.
+
+Avoid reading
+
+entire files
+
+into memory.
+
+---
+
+# External APIs
+
+Use
+
+timeouts
+
+connection pooling
+
+retry policies
+
+for external services.
+
+Never wait indefinitely.
+
+---
+
+# Connection Pooling
+
+Reuse
+
+database
+
+HTTP
+
+and other connections
+
+through managed pools.
+
+Avoid creating
+
+new connections
+
+for every request.
+
+---
+
+# Resource Reuse
+
+Reuse expensive resources
+
+through dependency injection
+
+or application startup.
+
+Avoid repeated initialization.
+
+---
+
+# Algorithms
+
+Choose algorithms
+
+appropriate
+
+for expected data size.
+
+Avoid
+
+quadratic algorithms
+
+for large datasets.
+
+---
+
+# Data Structures
+
+Choose data structures
+
+based on access patterns.
+
+Examples
+
+set
+
+for membership checks
+
+dict
+
+for lookups
+
+list
+
+for ordered iteration.
+
+---
+
+# Loops
+
+Avoid unnecessary
+
+nested loops
+
+over large collections.
+
+Prefer
+
+database operations
+
+when aggregation
+
+belongs in SQL.
+
+---
+
+# Filtering
+
+Filter
+
+inside the database
+
+whenever possible.
+
+Avoid loading
+
+large datasets
+
+only to filter them
+
+in Python.
+
+---
+
+# Sorting
+
+Sort
+
+inside the database
+
+when retrieving data.
+
+Avoid application-side sorting
+
+of large datasets.
+
+---
+
+# Counting
+
+Use
+
+COUNT()
+
+or EXISTS()
+
+instead of loading
+
+entire collections.
+
+---
+
+# Lazy Evaluation
+
+Prefer
+
+iterators
+
+generators
+
+streaming
+
+for large workloads.
+
+---
+
+# Compression
+
+Compress responses
+
+when payload size
+
+justifies it.
+
+Do not compress
+
+very small responses.
+
+---
+
+# Logging
+
+Avoid excessive logging
+
+inside hot paths.
+
+Log meaningful events.
+
+Never log
+
+inside tight loops
+
+unless debugging.
+
+---
+
+# Exceptions
+
+Exceptions are
+
+exceptional.
+
+Do not use exceptions
+
+for ordinary control flow.
+
+---
+
+# String Operations
+
+Avoid repeated
+
+string concatenation
+
+inside large loops.
+
+Prefer efficient construction.
+
+---
+
+# Background Work
+
+Long-running work
+
+should execute
+
+outside request handling.
+
+Examples
+
+email
+
+report generation
+
+notifications
+
+data exports
+
+---
+
+# Startup
+
+Perform expensive initialization
+
+once
+
+during application startup.
+
+Avoid repeated initialization
+
+per request.
+
+---
+
+# Shutdown
+
+Release
+
+connections
+
+clients
+
+resources
+
+cleanly.
+
+---
+
+# Configuration
+
+Configuration lookups
+
+should be inexpensive.
+
+Avoid repeated parsing
+
+or expensive computation.
+
+---
+
+# Observability
+
+Every production system
+
+should measure
+
+request latency
+
+query latency
+
+error rate
+
+throughput
+
+resource utilization.
+
+---
+
+# Metrics
+
+Track
+
+average latency
+
+p95 latency
+
+p99 latency
+
+database query duration
+
+slow queries
+
+cache hit ratio
+
+connection pool usage
+
+background job duration
+
+memory consumption
+
+CPU usage.
+
+---
+
+# Slow Queries
+
+Monitor
+
+slow SQL queries.
+
+Optimize
+
+indexes
+
+execution plans
+
+query structure
+
+before modifying application code.
+
+---
+
+# Load Testing
+
+Perform
+
+load testing
+
+before production releases.
+
+Test
+
+expected traffic
+
+peak traffic
+
+failure scenarios.
+
+---
+
+# Benchmarking
+
+Benchmark
+
+critical workflows
+
+using representative datasets.
+
+Avoid microbenchmarks
+
+that ignore real workloads.
+
+---
+
+# Scalability
+
+Design features
+
+to scale horizontally.
+
+Avoid assumptions
+
+of a single process
+
+or server.
+
+---
+
+# Resource Limits
+
+Respect
+
+database connection pool
+
+memory
+
+CPU
+
+network
+
+filesystem
+
+limits.
+
+Avoid exhausting
+
+shared resources.
+
+---
+
+# Graceful Degradation
+
+When under heavy load
+
+prefer
+
+reduced functionality
+
+over total failure
+
+where business rules permit.
+
+---
+
+# Testing
+
+Performance testing
+
+should include
+
+large datasets
+
+high concurrency
+
+peak traffic
+
+slow database
+
+external service failures.
+
+---
+
+# Cursor and Claude MUST NEVER
+
+Generate N+1 queries
+
+Generate unbounded database queries
+
+Generate SELECT *
+
+Generate lazy-loading dependent business logic
+
+Generate blocking operations inside async functions
+
+Generate time.sleep()
+
+Generate requests inside async code
+
+Generate repeated database queries in loops
+
+Generate application-side filtering of large datasets
+
+Generate application-side sorting of large datasets
+
+Generate loading entire files into memory unnecessarily
+
+Generate long-running transactions
+
+Generate excessive logging in hot paths
+
+Generate unnecessary object allocations
+
+Generate repeated expensive initialization
+
+Generate premature caching
+
+Generate optimization without measurement
+
+---
+
+# Example Flow
+
+Client Request
+
+↓
+
+Router
+
+↓
+
+Use Case
+
+↓
+
+Repository
+
+↓
+
+Optimized SQL Query
+
+↓
+
+Projection
+
+↓
+
+DTO
+
+↓
+
+Serialized Response
+
+↓
+
+Client
+
+---
+
+# Performance Checklist
+
+Every feature should satisfy
+
+✓ Async I/O
+
+✓ Efficient SQL
+
+✓ No N+1 queries
+
+✓ Pagination
+
+✓ Explicit projections
+
+✓ Minimal response size
+
+✓ Short transactions
+
+✓ No blocking calls
+
+✓ Measured performance
+
+✓ Observable metrics
+
+✓ Resource reuse
+
+✓ Load tested
+
+---
+
+# Final Principle
+
+Performance is achieved through sound architecture, efficient database access, short-lived transactions, asynchronous I/O, and measurable optimization.
+
+Design for scalability first.
+
+Measure second.
+
+Optimize third.
+
+Never trade correctness or maintainability for speculative performance improvements.

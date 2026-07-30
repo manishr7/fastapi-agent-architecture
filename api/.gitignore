@@ -1,0 +1,66 @@
+# --- OS & editors ---
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+*.sublime-*
+
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+credentials.json
+secrets/
+
+# --- Logs ---
+logs/
+*.log
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Python / virtualenv ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+ENV/
+env/
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+
+# --- Pytest / coverage / type checkers ---
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+.dmypy.json
+dmypy.json
+
+# --- Jupyter ---
+.ipynb_checkpoints/
+
+# --- Databases & local data ---
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Misc ---
+.cache/

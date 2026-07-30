@@ -1,0 +1,842 @@
+---
+description: Defines the standard API response contract, success responses, pagination metadata, error envelopes, DTO conventions, and serialization rules for all HTTP APIs.
+globs: api/app/modules/**/router.py, api/app/modules/**/schemas/**/*.py, api/app/shared/**/responses/**/*.py, api/app/core/exception_handlers.py
+paths:
+  - "api/app/modules/**/router.py"
+  - "api/app/modules/**/schemas/**/*.py"
+  - "api/app/shared/**/responses/**/*.py"
+  - "api/app/core/exception_handlers.py"
+alwaysApply: false
+---
+
+# ============================================================
+# Response Format Standards
+# ============================================================
+
+REST resource naming, versioning, and HTTP semantics: **`09-api-design.mdc`**. This rule defines the JSON response envelope only.
+
+---
+
+# Philosophy
+
+Every API response must follow
+one consistent contract.
+
+Clients should never need
+endpoint-specific parsing logic.
+
+Consistency is more important
+than convenience.
+
+---
+
+# Standard Response Envelope
+
+Every HTTP response must follow
+
+```json
+{
+    "data": {},
+    "meta": {},
+    "error": null
+}
+```
+
+Exactly three top-level fields exist.
+
+- data
+- meta
+- error
+
+Never add additional root fields.
+
+---
+
+# Successful Responses
+
+Successful responses always have
+
+```json
+{
+    "data": ...,
+    "meta": {},
+    "error": null
+}
+```
+
+Error must always be null.
+
+---
+
+# Error Responses
+
+Error responses always have
+
+```json
+{
+    "data": null,
+    "meta": {},
+    "error": {
+        "code": "",
+        "message": "",
+        "details": {}
+    }
+}
+```
+
+Never return partial success objects.
+
+Error JSON MUST be produced by **global exception handlers** in `app/core/exception_handlers.py`, not ad hoc in routers.
+
+See `12-errors.mdc` for mapping and logging rules.
+
+---
+
+# Root Fields
+
+Root field meanings
+
+data
+
+Contains requested resource.
+
+meta
+
+Contains metadata.
+
+error
+
+Contains failure information.
+
+---
+
+# Root Field Rules
+
+Every response MUST contain
+
+data
+
+meta
+
+error
+
+Never omit any field.
+
+---
+
+# Response DTOs
+
+All responses must use
+dedicated Response DTOs.
+
+Never return
+
+ORM Models
+
+Domain Entities
+
+database rows
+
+raw dictionaries
+
+---
+
+# DTO Naming
+
+Examples
+
+UserResponse
+
+SchoolResponse
+
+ReportResponse
+
+RoleResponse
+
+TeacherResponse
+
+PaginatedUserResponse
+
+---
+
+# Serialization
+
+Routers are responsible for
+
+serializing DTOs.
+
+Use Cases return
+
+Domain Entities
+
+or
+
+Application DTOs.
+
+Repositories never serialize.
+
+---
+
+# Null Rules
+
+Success
+
+```json
+"error": null
+```
+
+Failure
+
+```json
+"data": null
+```
+
+Never mix both.
+
+---
+
+# Collections
+
+Collections must always return
+
+```json
+[]
+```
+
+Never return
+
+null
+
+for lists.
+
+---
+
+# Empty Results
+
+No matching resources
+
+↓
+
+```json
+{
+    "data": [],
+    "meta": {
+        "total": 0
+    },
+    "error": null
+}
+```
+
+Avoid inventing custom responses.
+
+---
+
+# Single Resource
+
+Return one object.
+
+Example
+
+```json
+{
+    "data": {
+        "id": 1
+    },
+    "meta": {},
+    "error": null
+}
+```
+
+---
+
+# Create Responses
+
+POST
+
+↓
+
+201 Created
+
+Example
+
+```json
+{
+    "data": {
+        "id": 100
+    },
+    "meta": {},
+    "error": null
+}
+```
+
+---
+
+# Delete Responses
+
+DELETE
+
+↓
+
+204 No Content
+
+or
+
+200
+
+using the standard envelope.
+
+Choose one project-wide convention.
+
+Be consistent.
+
+---
+
+# Update Responses
+
+PATCH
+
+PUT
+
+should return
+
+the updated resource
+
+whenever practical.
+
+---
+
+# Metadata
+
+Meta contains
+
+pagination
+
+execution metadata
+
+warnings
+
+timing
+
+request identifiers
+
+Never place business data
+inside meta.
+
+---
+
+# Pagination Metadata
+
+Standard pagination
+
+```json
+{
+    "meta": {
+        "offset": 0,
+        "limit": 20,
+        "total": 350,
+        "has_next": true
+    }
+}
+```
+
+---
+
+# Optional Metadata
+
+`request_id`/`correlation_id` are not optional — see "Request ID and
+Correlation ID" below; they are auto-filled on every response.
+
+Meta may additionally contain
+
+timestamp
+
+execution_time_ms
+
+api_version
+
+when appropriate.
+
+---
+
+# Request ID and Correlation ID
+
+Every HTTP response should include tracing ids in `meta`, auto-filled from
+`structlog.contextvars` via `tracing_meta()` in `app/core/tracing.py` (called
+by `app/shared/responses/envelope.py`) when `meta` is not explicitly passed.
+`tracing_meta()` lives in `app/core/` rather than `app/shared/responses/`
+because it is application-wide cross-cutting infrastructure, not a response-
+shape concern — `01-folder-structure.mdc` reserves `shared/` for genuinely
+generic code and `core/` for exactly this kind of thing (alongside
+`logging.py`, `middleware.py`):
+
+- `correlation_id` — primary support reference; survives across services
+- `request_id` — identifies this API hop only
+
+The same values appear in response headers (`X-Correlation-ID`,
+`X-Request-ID`) and on every log line for the request.
+
+---
+
+# Timestamp
+
+Prefer ISO-8601 UTC.
+
+Example
+
+```text
+2026-07-28T10:15:00Z
+```
+
+---
+
+# Execution Time
+
+Execution time
+
+is infrastructure metadata.
+
+Never expose internal profiling.
+
+---
+
+# Resource Representation
+
+Responses describe
+
+business concepts
+
+not database tables.
+
+---
+
+# Sensitive Data
+
+Never expose
+
+passwords
+
+password hashes
+
+tokens
+
+refresh tokens
+
+JWT secrets
+
+API secrets
+
+internal identifiers
+
+database implementation details
+
+SQL queries
+
+stack traces
+
+---
+
+# Internal Fields
+
+Never expose
+
+created_by_internal
+
+deleted_flag
+
+row_version
+
+internal_status
+
+unless required by API contract.
+
+---
+
+# Enum Serialization
+
+Serialize enums
+
+using stable API values.
+
+Never expose
+
+Python enum internals.
+
+---
+
+# Boolean Values
+
+Return
+
+true
+
+false
+
+Never use
+
+0
+
+1
+
+"true"
+
+"false"
+
+---
+
+# Numbers
+
+Return numeric types.
+
+Do not serialize numbers
+
+as strings
+
+unless precision requires it.
+
+---
+
+# Dates
+
+Use ISO-8601.
+
+Always include timezone
+
+when applicable.
+
+---
+
+# Null Values
+
+Return null
+
+only when
+
+business meaning exists.
+
+Avoid excessive nulls.
+
+---
+
+# Field Naming
+
+All API fields
+
+must use
+
+snake_case.
+
+Never mix
+
+camelCase
+
+PascalCase
+
+snake_case.
+
+---
+
+# DTO Stability
+
+DTOs define
+
+the public contract.
+
+Database changes
+
+must not automatically
+
+change DTOs.
+
+---
+
+# Versioning
+
+Breaking DTO changes
+
+require
+
+new API versions.
+
+---
+
+# Nested Objects
+
+Return nested resources
+
+only when explicitly required.
+
+Avoid deeply nested responses.
+
+---
+
+# Response Size
+
+Only include
+
+necessary fields.
+
+Avoid over-fetching.
+
+---
+
+# Success Messages
+
+Avoid
+
+```json
+{
+    "message": "Success"
+}
+```
+
+Business data belongs
+
+inside data.
+
+---
+
+# Human Messages
+
+Error messages
+
+belong inside
+
+error.message
+
+Never place messages
+
+inside data.
+
+---
+
+# Error Codes
+
+Every error must contain
+
+stable machine-readable codes.
+
+Example
+
+```json
+{
+    "code": "USER_NOT_FOUND"
+}
+```
+
+---
+
+# Error Details
+
+details contains
+
+field validation
+
+constraint violations
+
+context
+
+Never expose
+
+stack traces.
+
+---
+
+# Warnings
+
+Warnings belong
+
+inside meta.
+
+Example
+
+```json
+{
+    "meta": {
+        "warnings": [
+            "Using deprecated field."
+        ]
+    }
+}
+```
+
+---
+
+# Hypermedia
+
+Do not implement HATEOAS.
+
+Keep responses simple.
+
+---
+
+# File Downloads
+
+Binary downloads
+
+should stream files.
+
+Do not wrap binary content
+
+inside JSON.
+
+---
+
+# Streaming Responses
+
+Streaming endpoints
+
+may bypass
+
+the standard envelope.
+
+Document exceptions.
+
+---
+
+# Health Endpoints
+
+Health endpoints
+
+may return simplified payloads.
+
+Document exceptions.
+
+---
+
+# Authentication Responses
+
+Authentication endpoints
+
+still follow
+
+the standard response envelope.
+
+Tokens belong
+
+inside data.
+
+---
+
+# Consistency
+
+Identical operations
+
+must produce
+
+identical response structures.
+
+---
+
+# Documentation
+
+Every response model
+
+must appear
+
+in OpenAPI documentation.
+
+---
+
+# Testing
+
+Every endpoint should verify
+
+response shape
+
+status code
+
+DTO serialization
+
+metadata
+
+error envelope
+
+---
+
+# Cursor and Claude MUST NEVER
+
+Generate raw dictionaries
+
+Generate ORM Models
+
+Generate Domain Entities
+
+Generate SQLAlchemy Models
+
+Generate inconsistent root fields
+
+Generate missing meta
+
+Generate missing error
+
+Generate missing data
+
+Generate stack traces
+
+Generate passwords
+
+Generate internal database fields
+
+Generate camelCase
+
+Generate inconsistent pagination
+
+Generate different error structures
+
+Generate stringified booleans
+
+Generate stringified numbers
+
+Generate business messages outside data
+
+Generate HTTP-specific fields inside DTOs
+
+Generate transport-specific logic inside Domain
+
+---
+
+# Canonical Success Example
+
+{
+    "data": {
+        "id": 15,
+        "name": "John Doe",
+        "status": "ACTIVE"
+    },
+    "meta": {
+        "correlation_id": "8b7b34ab-...",
+        "request_id": "3f2c9a10-..."
+    },
+    "error": null
+}
+
+---
+
+# Canonical Error Example
+
+{
+    "data": null,
+    "meta": {
+        "correlation_id": "8b7b34ab-...",
+        "request_id": "3f2c9a10-..."
+    },
+    "error": {
+        "code": "USER_NOT_FOUND",
+        "message": "The requested user does not exist.",
+        "details": {}
+    }
+}
+
+`correlation_id`/`request_id` are always present (auto-filled — see
+"Request ID and Correlation ID"). `api_version` is not currently
+implemented; add it here once a router actually sets it.
+
+---
+
+# Final Principle
+
+Every response is a contract.
+
+Clients should be able to parse every endpoint using the same response envelope, regardless of the resource, business operation, or HTTP status code.
+
+A response should reveal business information while hiding implementation details.

@@ -1,0 +1,91 @@
+---
+description: PEXM Exams monorepo — stack, layout, and cross-cutting conventions
+alwaysApply: true
+---
+
+# PEXM Exams Monorepo
+
+Open the **`pexm-exams`** repository root as your workspace — the Cursor workspace
+folder, or the directory you launch `claude` from — so rule globs and paths resolve
+correctly.
+
+| Path | Stack | Role |
+|------|--------|------|
+| `web/` | Next.js (App Router), TypeScript, React | Web UI |
+| `api/` | FastAPI, Python 3.12+ | REST API, use cases, persistence |
+
+Application code lives under **`api/app/`**.
+
+## Architecture (non-negotiable)
+
+```text
+main.py (bootstrap only)
+  └── app/api/router.py          ← /api
+        └── app/api/v6/router.py ← /v6 (routing composition only)
+              └── modules/*/router.py
+
+HTTP Request → Router → Use Case → Repository → Database
+```
+
+- `main.py` — pure composition root: factory, `app.state`, middleware, exception handlers, lifespan.
+- `app/api/` — HTTP routing composition only. No endpoints, no business logic.
+- `app/modules/<feature>/router.py` — all endpoint implementations. Version-agnostic.
+- Domain and use cases remain framework-independent.
+- HTTP error translation: **global exception handlers** in `api/app/core/exception_handlers.py` (see `12-errors.mdc`).
+
+## Application State
+
+Long-lived resources are stored on `app.state`, set in `main.py` lifespan.
+Full inventory: **`01-folder-structure.mdc`**'s "Application State" section.
+
+## Rule precedence (when rules overlap)
+
+1. `12-errors.mdc` — HTTP errors, handlers, status mapping
+2. `13-transactions.mdc` — commits, rollbacks, session boundaries
+3. `11-validation.mdc` — validation layer split
+4. `10-response-format.mdc` — JSON response envelope
+5. `09-api-design.mdc` — REST semantics and HTTP codes
+6. `00-philosophy.mdc` — decision priority
+
+## Backend rule index (`00`–`22`)
+
+| File | Topic |
+|------|--------|
+| `00-philosophy.mdc` | Constitution, SOLID, layering |
+| `01-folder-structure.mdc` | Project and module layout, `app/api/` layer, `app.state` |
+| `02-python.mdc` | Python language and style |
+| `03-fastapi.mdc` | Routers, DI, `app.state`, presentation wiring |
+| `04-async.mdc` | Async runtime, event loop, no module globals |
+| `05-sqlalchemy-part-1.mdc` | Engine, AsyncSession lifecycle, `app.state` |
+| `05-sqlalchemy-part-2.mdc` | ORM models, relationships |
+| `05-sqlalchemy-part-3.mdc` | Queries, N+1, DB performance |
+| `06-domain-entities.mdc` | Domain entities |
+| `07-use-cases.mdc` | Use cases |
+| `08-repositories.mdc` | Repositories, ORM model ownership |
+| `09-api-design.mdc` | REST API design, versioning via `app/api/` |
+| `10-response-format.mdc` | Response envelope |
+| `11-validation.mdc` | Validation by layer |
+| `12-errors.mdc` | Exceptions and handlers |
+| `13-transactions.mdc` | Transactions |
+| `14-concurrency.mdc` | DB concurrency, idempotency |
+| `15-security.mdc` | Security |
+| `16-performance.mdc` | Application performance |
+| `17-testing.mdc` | Tests |
+| `18-alembic.mdc` | Migrations |
+| `19-legacy-db.mdc` | Legacy database |
+| `20-cursor-anti-patterns.mdc` | Always-on generation guardrails |
+| `21-logging.mdc` | Structured logging, request/correlation ids, log levels |
+| `22-redis.mdc` | Redis lifecycle, cache vs lock, deferred rate-limiting/pubsub |
+
+## Backend tooling
+
+- **Lint/format:** `ruff check --fix` + `ruff format` via pre-commit (see `.pre-commit-config.yaml`)
+- **Tests:** `pytest` (`17-testing.mdc`)
+- **Type checking:** add pyright/basedpyright when codebase grows
+
+Configure in `api/pyproject.toml`.
+
+## Frontend and CI
+
+- **Frontend rules:** TBD — `nextjs-frontend.mdc` applies under `web/` when content is added.
+- **CI / Docker:** TBD when `.github/` or `docker/` exist.

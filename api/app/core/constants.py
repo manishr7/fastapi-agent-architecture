@@ -1,0 +1,2 @@
+DEFAULT_ERROR_MESSAGE = "An unexpected error occurred."
+UNEXPECTED_ERROR_CODE = "UNEXPECTED_ERROR"

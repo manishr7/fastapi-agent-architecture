@@ -1,0 +1,802 @@
+---
+description: SQLAlchemy 2.0 Async standards. Part 1 — Engine, AsyncSession lifecycle, repository contract and transaction management.
+globs: api/app/main.py, api/app/database/session.py, api/app/database/base.py, api/app/core/dependencies.py
+paths:
+  - "api/app/main.py"
+  - "api/app/database/session.py"
+  - "api/app/database/base.py"
+  - "api/app/core/dependencies.py"
+alwaysApply: false
+---
+
+# SQLAlchemy Standards
+
+This project uses
+
+- SQLAlchemy 2.x
+- Async ORM
+- asyncmy
+- MySQL
+
+Legacy SQLAlchemy APIs are prohibited.
+
+---
+
+# Philosophy
+
+SQLAlchemy is the persistence layer.
+
+SQLAlchemy MUST remain invisible to the business layer.
+
+Business logic must never know
+
+- ORM Models
+- Sessions
+- SQL
+- Transactions
+
+Repositories are responsible for hiding SQLAlchemy.
+
+---
+
+# ORM Style
+
+Always use SQLAlchemy 2.x style.
+
+Allowed
+
+```python
+select(UserModel)
+```
+
+Forbidden
+
+```python
+session.query(UserModel)
+```
+
+Never generate Query API code.
+
+---
+
+# Database Driver
+
+The only supported driver is
+
+```text
+mysql+asyncmy://
+```
+
+Never use
+
+- pymysql
+- mysqlclient
+- aiomysql (unless explicitly approved)
+
+---
+
+# Engine
+
+Only one Engine instance should exist per application process.
+
+The engine is application-scoped.
+
+The engine lifecycle is managed in `main.py` lifespan:
+
+```python
+# In lifespan startup:
+engine = create_engine_from_settings(app.state.settings)
+app.state.engine = engine
+
+# In lifespan shutdown:
+await dispose_engine(app.state.engine)
+```
+
+Never create engines inside
+
+- repositories
+- use cases
+- routers
+- module-level globals
+
+`app/database/session.py` provides factory functions only:
+`create_engine_from_settings(settings)`, `create_session_factory(engine)`, `dispose_engine(engine)`.
+
+---
+
+# Engine Configuration
+
+Always configure
+
+- pool_pre_ping=True
+- pool_recycle
+- pool_size
+- max_overflow
+
+Pool configuration belongs inside database configuration (`Settings`).
+
+Never hardcode pool sizes.
+
+---
+
+# Connection URL and TLS
+
+Connection identity lives in `Settings` as discrete fields
+(`db_host`, `db_port`, `db_name`, `db_user`, `db_password: SecretStr`,
+`db_ssl_ca`/`db_ssl_cert`/`db_ssl_key: Path | None`) — never a single
+`DATABASE_URL` string. A hand-built DSN string requires manual
+percent-encoding for special characters (`@`, `:`, `/`, `#`, `%`) in the
+password; discrete fields avoid that entirely.
+
+`app/database/session.py` assembles the URL and TLS options — never format
+or concatenate a connection string anywhere else:
+
+- `build_database_url(settings) -> URL` — `sqlalchemy.URL.create(...)`, never
+  an f-string or `.format()` DSN.
+- `build_ssl_connect_args(settings) -> dict` — asyncmy's `ssl` connect
+  argument (a dict of `ca`/`cert`/`key` paths), passed via
+  `create_async_engine(url, connect_args=...)`. Empty dict when no TLS is
+  configured.
+
+`db_password` is `SecretStr` so it never appears in a `Settings` repr, log
+call, or error-tracking breadcrumb — unwrap it with `.get_secret_value()`
+only at the point `build_database_url` needs the raw value.
+
+`Settings` validates at startup (fail fast, `00-philosophy.mdc`): `db_ssl_cert`
+and `db_ssl_key` must be set together or not at all (a client cert is
+unusable without its key), and any configured SSL path must exist on disk.
+
+`migrations/env.py` reuses these same two functions rather than
+reimplementing DSN assembly — one source of truth for how the app connects
+to MySQL, migrations included.
+
+---
+
+# Session Factory
+
+Always use
+
+```python
+async_sessionmaker
+```
+
+Never instantiate AsyncSession directly.
+
+The session factory is stored on `app.state.session_factory` (set in `main.py` lifespan).
+
+Dependencies access it via `request.app.state.session_factory`:
+
+```python
+async def get_db(request: Request) -> AsyncGenerator[AsyncSession, None]:
+    factory = request.app.state.session_factory
+    session = factory()
+    try:
+        yield session
+    finally:
+        await session.close()
+```
+
+Good
+
+```python
+SessionFactory = async_sessionmaker(...)
+```
+
+Bad
+
+```python
+AsyncSession(...)
+```
+
+---
+
+# Session Ownership
+
+The application owns sessions.
+
+Repositories do not.
+
+Use cases do not.
+
+Routers do not.
+
+Dependency Injection creates sessions.
+
+Dependency Injection destroys sessions.
+
+---
+
+# AsyncSession Lifetime
+
+Exactly one AsyncSession per HTTP request.
+
+Never reuse sessions across requests.
+
+Never cache sessions.
+
+Never use singleton sessions.
+
+---
+
+# Session Scope
+
+Session scope equals request scope.
+
+Session lifetime must be predictable.
+
+Avoid extending session lifetime beyond the request.
+
+---
+
+# Session Injection
+
+Repositories receive AsyncSession.
+
+Never create sessions inside repositories.
+
+Bad
+
+```python
+session = AsyncSession(...)
+```
+
+Good
+
+```python
+class UserRepository:
+
+    def __init__(
+        self,
+        session: AsyncSession,
+    ):
+        ...
+```
+
+---
+
+# Dependency Direction
+
+Router
+
+↓
+
+Use Case
+
+↓
+
+Repository
+
+↓
+
+AsyncSession
+
+Never reverse this dependency.
+
+---
+
+# Repository Responsibility
+
+Repositories exist only to
+
+- execute queries
+- map ORM models
+- persist data
+
+Repositories do not
+
+- validate business rules
+- commit
+- rollback
+- authenticate
+- authorize
+- call HTTP APIs
+
+---
+
+# Repository Return Types
+
+Repositories return
+
+Domain Entities
+
+DTOs (when explicitly intended)
+
+Primitive values
+
+Repositories NEVER expose ORM models.
+
+Bad
+
+```python
+return UserModel(...)
+```
+
+Good
+
+```python
+return User(...)
+```
+
+---
+
+# ORM Isolation
+
+ORM models stay inside repositories.
+
+No ORM model should leave the persistence layer.
+
+---
+
+# Business Layer
+
+Business logic must never import
+
+SQLAlchemy
+
+AsyncSession
+
+ORM Models
+
+Engine
+
+Select
+
+Insert
+
+Update
+
+Delete
+
+The business layer is database independent.
+
+---
+
+# Transactions
+
+Transaction boundaries and commit/rollback ownership: **`13-transactions.mdc`**.
+
+Repositories execute statements; use cases decide when work succeeds.
+
+---
+
+# Repository Rules
+
+Repositories MUST NOT
+
+commit()
+
+rollback()
+
+begin()
+
+close()
+
+Repositories are transaction agnostic.
+
+Commit/rollback rules: **`13-transactions.mdc`**.
+
+---
+
+# Flush
+
+Use flush()
+
+only when
+
+database-generated values
+
+are immediately required.
+
+Examples
+
+Auto Increment IDs
+
+Generated UUIDs
+
+Database Defaults
+
+Never use flush() unnecessarily.
+
+---
+
+# Commit
+
+`commit()` persists the transaction. Do not call `commit()` after every INSERT; commit once per use-case transaction.
+
+When to commit or rollback: **`13-transactions.mdc`**.
+
+---
+
+# Refresh
+
+refresh()
+
+reloads values from the database.
+
+Only use refresh()
+
+when database-generated values are needed.
+
+Avoid unnecessary refresh calls.
+
+---
+
+# Expire
+
+Avoid relying on expiration.
+
+Repositories should return fully usable domain entities.
+
+---
+
+# Nested Transactions
+
+Avoid nested transactions.
+
+Use SAVEPOINT only when business rules explicitly require partial rollback.
+
+Nested transactions should be rare.
+
+---
+
+# Unit of Work
+
+One HTTP request
+
+↓
+
+One Use Case
+
+↓
+
+One Transaction
+
+↓
+
+One Commit
+
+This is the default.
+
+---
+
+# Autocommit
+
+Autocommit is prohibited.
+
+Every modification belongs to an explicit transaction.
+
+---
+
+# Integrity Errors
+
+IntegrityError
+
+should never reach the Router.
+
+Repositories translate
+
+database exceptions
+
+↓
+
+domain exceptions
+
+Use Cases decide how to respond.
+
+---
+
+# Constraint Violations
+
+Do not parse SQL error strings.
+
+Use SQLAlchemy exception types.
+
+---
+
+# Repository Size
+
+Repositories should remain focused.
+
+Target
+
+<300 lines.
+
+Split repositories when domains become large.
+
+---
+
+# One Repository
+
+One repository should represent one aggregate.
+
+Avoid repositories that manage dozens of unrelated entities.
+
+---
+
+# CRUD
+
+Avoid generic CRUD repositories.
+
+Prefer explicit repositories.
+
+Good
+
+UserRepository
+
+SchoolRepository
+
+RoleRepository
+
+Bad
+
+BaseRepository
+
+GenericRepository
+
+UniversalRepository
+
+---
+
+# Repository Methods
+
+Methods should describe business intent.
+
+Good
+
+get_by_email()
+
+get_active_users()
+
+find_school()
+
+save()
+
+delete()
+
+Bad
+
+execute()
+
+run()
+
+process()
+
+action()
+
+---
+
+# SQL Construction
+
+Repositories build SQL.
+
+No other layer should construct SQL.
+
+---
+
+# Raw SQL
+
+Prefer ORM.
+
+Use raw SQL only when
+
+ORM cannot express the query efficiently.
+
+Raw SQL requires justification.
+
+---
+
+# Text Queries
+
+Avoid text()
+
+unless unavoidable.
+
+Prefer typed SQLAlchemy expressions.
+
+---
+
+# Bulk Operations
+
+Bulk operations should remain explicit.
+
+Understand
+
+bulk_insert
+
+bulk_update
+
+bulk_delete
+
+bypass portions of ORM behavior.
+
+Do not use them blindly.
+
+---
+
+# Identity Map
+
+Do not depend on SQLAlchemy identity map behavior.
+
+Repositories should behave predictably.
+
+---
+
+# Session State
+
+Avoid relying on
+
+dirty
+
+new
+
+deleted
+
+collections.
+
+Write explicit persistence logic.
+
+---
+
+# Detached Objects
+
+Never expose detached ORM objects.
+
+Return mapped domain entities.
+
+---
+
+# Domain Mapping
+
+Repository
+
+↓
+
+ORM
+
+↓
+
+Domain Entity
+
+Never skip mapping.
+
+---
+
+# Repository Dependencies
+
+Repositories may depend on
+
+AsyncSession
+
+Nothing else.
+
+Avoid injecting
+
+HTTP clients
+
+settings
+
+request
+
+FastAPI objects
+
+---
+
+# Thread Safety
+
+AsyncSession is not thread-safe.
+
+Never share AsyncSession across threads.
+
+Never share AsyncSession across asyncio tasks.
+
+---
+
+# AsyncSession Concurrency
+
+Never perform
+
+asyncio.gather()
+
+using the same AsyncSession.
+
+Full examples — the incorrect pattern, the correct sequential form, the
+correct single-query/JOIN form, and the correct separate-sessions form —
+live in **`04-async.mdc`**'s "Concurrent Database Operations" section.
+
+---
+
+# Database Connections
+
+Connections belong to the session.
+
+Never manually acquire connections unless necessary.
+
+---
+
+# Explicitness
+
+Repository methods should clearly communicate
+
+what
+
+they read
+
+or
+
+what
+
+they modify.
+
+Avoid ambiguous methods.
+
+---
+
+# Repository Purity
+
+Repositories should have no side effects outside persistence.
+
+No emails.
+
+No HTTP.
+
+No logging business events.
+
+No RabbitMQ.
+
+Persistence only.
+
+---
+
+# Cursor and Claude MUST NEVER
+
+Generate session.query()
+
+Generate synchronous Session
+
+Generate commit() inside repository
+
+Generate rollback() inside repository
+
+Generate AsyncSession()
+
+Generate engines inside repositories
+
+Generate global sessions
+
+Generate ORM models outside repositories
+
+Generate business logic inside repositories
+
+Generate FastAPI imports inside repositories
+
+Generate HTTPException inside repositories
+
+Generate multiple commits inside one business operation
+
+Generate implicit transactions
+
+Generate autocommit
+
+Generate generic CRUD repositories
+
+Generate BaseRepository abstractions
+
+Generate raw SQL without justification
+
+Generate text() when ORM is sufficient
+
+Generate repositories that know HTTP concepts
+
+Generate repositories returning ORM models
+
+Generate shared AsyncSession instances
+
+---
+
+# Final Principle
+
+SQLAlchemy is infrastructure.
+
+Repositories isolate SQLAlchemy from the rest of the application.
+
+Every database interaction should be explicit, deterministic, transaction-safe, and invisible to the business layer.
