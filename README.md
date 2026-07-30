@@ -1,13 +1,7 @@
 # FastAPI Agent Architecture
 
+[![CI](https://github.com/manishr7/fastapi-agent-architecture/actions/workflows/ci.yml/badge.svg)](https://github.com/manishr7/fastapi-agent-architecture/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-
-<!--
-CI badge intentionally not added yet: this repository isn't pushed to a
-GitHub remote (see the README's Project status), so there's no real
-workflow URL to point to. A badge with a placeholder owner/repo would be
-a broken link — add it in Milestone 6, once the actual URL exists.
--->
 
 A FastAPI reference backend where the layered architecture (Router → Use Case
 → Repository → Database) is enforced through a rule set that both human
