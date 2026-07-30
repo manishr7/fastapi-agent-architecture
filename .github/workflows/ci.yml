@@ -34,5 +34,8 @@ jobs:
       - name: Layer boundaries (import-linter)
         run: uv run lint-imports
 
+      - name: Repository transaction-boundary check
+        run: uv run pytest tests/test_architecture_boundaries.py -v
+
       - name: Tests
         run: uv run pytest
