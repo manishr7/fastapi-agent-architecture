@@ -18,6 +18,7 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = [
+    "aiosqlite>=0.22.1",
     "httpx>=0.28.0",
     "import-linter>=2.1",
     "pre-commit>=4.0.0",
