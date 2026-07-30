@@ -47,6 +47,20 @@ This is a reference architecture, not a finished product.
 
 Open this repository's root as your workspace so rule paths resolve correctly.
 
+## Documentation
+
+The rule files (`.claude/rules/`) are written as terse, machine-directed
+prose — correct, but not where the reasoning lives. For the "why," not just
+the "what":
+
+- [`docs/decisions/`](docs/decisions/) — short ADRs condensing reasoning
+  already in the rules: `AsyncSession` as the Unit of Work, Redis's
+  fail-open cache vs. fail-closed locks, why global exception handlers own
+  HTTP translation, `log_context` vs. `details`.
+- [`docs/rule-system.md`](docs/rule-system.md) — how the two rule trees
+  (`.claude/rules/` vs. `.cursor/rules/`) stay in sync, why rules load
+  always-on vs. path-scoped, and rule precedence when two files overlap.
+
 ---
 
 ## Prerequisites
