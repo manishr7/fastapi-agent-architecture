@@ -1,0 +1,5 @@
+# Normalize line endings to LF for all text files, regardless of each
+# contributor's local core.autocrlf setting or OS. Matches ruff's
+# line-ending = "lf" config (api/pyproject.toml) so `ruff format --check`
+# behaves the same in CI as it does for every contributor.
+* text=auto eol=lf
