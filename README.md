@@ -74,7 +74,7 @@ the "what":
   already in the rules: `AsyncSession` as the Unit of Work, Redis's
   fail-open cache vs. fail-closed locks, why global exception handlers own
   HTTP translation, `log_context` vs. `details`.
-- [`docs/rule-system.md`](docs/rule-system.md) — how the two rule trees
+- [`docs/rule-loading-and-sync.md`](docs/rule-loading-and-sync.md) — how the two rule trees
   (`.claude/rules/` vs. `.cursor/rules/`) stay in sync, why rules load
   always-on vs. path-scoped, and rule precedence when two files overlap.
 - [`docs/architecture.md`](docs/architecture.md) — a diagram of the
