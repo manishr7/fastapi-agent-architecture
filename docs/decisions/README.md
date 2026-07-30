@@ -35,4 +35,6 @@ Which `.claude/rules/*.md` file(s) this is sourced from.
 
 ## Index
 
-_No ADRs yet — added one at a time in subsequent commits._
+| ADR | Decision |
+|---|---|
+| [0001](0001-async-session-as-unit-of-work.md) | `AsyncSession` as the Unit of Work — no separate transaction abstraction |
