@@ -1,12 +1,12 @@
 ---
-description: PEXM Exams monorepo — stack, layout, and cross-cutting conventions
+description: fastapi-agent-architecture — stack, layout, and cross-cutting conventions
 alwaysApply: true
 ---
 
-# PEXM Exams Monorepo
+# FastAPI Agent Architecture
 
-Open the **`pexm-exams`** repository root as your workspace — the Cursor workspace
-folder, or the directory you launch `claude` from — so rule globs and paths resolve
+Open this repository's root as your workspace — the Cursor workspace folder, or
+the directory you launch `claude` from — so rule globs and paths resolve
 correctly.
 
 | Path | Stack | Role |

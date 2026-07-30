@@ -1,7 +1,7 @@
 [project]
-name = "pexm-exams-api"
+name = "fastapi-agent-architecture"
 version = "0.1.0"
-description = "PEXM Exams FastAPI backend"
+description = "FastAPI reference backend with rules that constrain AI coding agents to a frozen architecture"
 readme = "../README.md"
 requires-python = ">=3.12"
 dependencies = [
