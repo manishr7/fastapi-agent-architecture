@@ -14,12 +14,12 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    app_name: str = Field(default="pexm-exams-api", alias="APP_NAME")
+    app_name: str = Field(default="fastapi-agent-architecture", alias="APP_NAME")
     debug: bool = Field(default=False, alias="DEBUG")
 
     db_host: str = Field(default="localhost", alias="DB_HOST")
     db_port: int = Field(default=3306, alias="DB_PORT")
-    db_name: str = Field(default="pexm_exams", alias="DB_NAME")
+    db_name: str = Field(default="fastapi_agent_architecture", alias="DB_NAME")
     db_user: str = Field(default="root", alias="DB_USER")
     db_password: SecretStr = Field(default="root", alias="DB_PASSWORD")
     # Optional TLS. Set DB_SSL_CA alone for server-only verification, or all

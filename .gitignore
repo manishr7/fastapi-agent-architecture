@@ -1,5 +1,5 @@
-# PEXM Exams monorepo — shared ignores (see also api/.gitignore; no web/
-# directory exists in this copy, so web/.gitignore does not apply here)
+# Shared ignores (see also api/.gitignore; no web/ directory exists in
+# this copy, so web/.gitignore does not apply here)
 
 # --- OS & editors ---
 .DS_Store
